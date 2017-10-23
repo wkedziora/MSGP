@@ -103,7 +103,7 @@ trees_low %>%
 
 ggplot(data = trees_low) +
   geom_count(mapping = aes(x = gat, y = pokr))
-
+ 
 
 ##########
 ### Ujednolicenie nazw gatunków dominujących
