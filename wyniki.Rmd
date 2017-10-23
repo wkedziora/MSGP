@@ -1,0 +1,51 @@
+---
+title: "Przestrzenne zrĂłĹĽnicowanie drugiego piÄ™tra w drzewostanach sosnowych"
+author: "Wojciech KÄ™dziora"
+date: "22 paĹşdziernika 2017"
+output:
+  word_document:
+    reference_docx: word-styles-reference-01.docx
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(odbc)
+library(DBI)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wyniki
+
+## Ładowanie danych z WISL
+
+Biuro Urządzania Lasu i Geodezji Leśnej przechowuje dane dotyczące pomiarów wykonywanych w ramach *WISL* w bazie danych. Po podłączeniu wspomnianej bazy danych oczom naszym ukazuje się spis tabel:
+
+```{r loading_data}
+testdb <- file.path("D:\\Praca\\Badania\\WISL\\WISL_10lat_SGGW") #determining database filepath
+con <- dbConnect(odbc::odbc(), dsn = "WISL", encoding = "Windows-1250")#connecting to db
+dbListTables(con) #listing all tables available
+```
+
+Tabele które nas interesują to tabele: `r dbListTables(con)[18]` w której zawarto informacje o najmniejszych drzewach z powierzchni próbnych (do o,5 m wysokości), `r dbListTables(con)[16]` która zawiera średniej wielkości drzewa z powierzchni B (od 0,5 m do 3 cm pierśnicy) oraz `r dbListTables(con)[17]` która przechowuje informacje o drzewach między 3 a 7 cm pierśnicy.
+
+Tabela `r dbListTables(con)[23]` przechowuje informacje o położeniu poszczególnych powierzchni próbnych, natomiast opisy administracyjne i ogóle poszzcególnych powierzchni zwarte są w tabeli `r dbListTables(con)[14]`.
+
+## Drzewa do 0,5 m wysokości
+
+You can also embed plots, for example:
+
+```{r 05_loading, echo=FALSE}
+DRZEWA_DO_05 <- dbReadTable(con, "DRZEWA_DO_05")
+drop.cols <- c("NR_PUNKTU", "LP", "NR_CYKLU", "WAR", "USZK_RODZ2", "USZK_PROC2", "ID") 
+DRZEWA_DO_05 %>% filter(NR_CYKLU == "2" & WAR == "1") %>% select(-one_of(drop.cols)) -> D.05.filter 
+D.05.filter$GAT <- factor(D.05.filter$GAT)
+D.05.filter$POKR <- factor(D.05.filter$POKR)
+D.05.filter$USZK_RODZ1 <- factor(D.05.filter$USZK_RODZ1)
+```
+
