@@ -6,6 +6,10 @@ library(odbc)
 library(DBI)
 library(tidyverse)
 library(forcats)
+library(sp)
+library(ggmap)
+library(tmap)
+vignette("tmap-nutshell")
 
 ###
 ### Czego potrzebuję?
@@ -68,7 +72,7 @@ trees_low_raw %>% # raw data loading to pipe
   rename_all(tolower) %>%
   filter(war == 1) %>%
   select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2, war)) %>%
-  mutate_at(low_col, funs(factor(.))) -> trees_low # creating a new tibble
+  mutate_at(trees_low_col, funs(factor(.))) -> trees_low # creating a new tibble
 summary(trees_low)
 
 # str_c(levels(DRZEWA_DO_05_filter_gps$GAT), collapse = "', '")
@@ -86,7 +90,53 @@ trees_low$pokr <- factor(trees_low$pokr, ordered = TRUE, levels = c("+", "1", "5
 # checking if there is any sample plot with dubbled species
 trees_low %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
-trees_low$gat %>% factor() %>% fct_lump(n = 10) %>% fct_infreq() %>% fct_relevel("Other", after = Inf) %>% fct_count() %>% ggplot(., aes(f, n)) + geom_bar(stat = "identity")
+trees_low$gat %>% 
+  factor() %>% 
+  fct_lump(n = 10) %>% 
+  fct_infreq() %>% 
+  fct_relevel("Other", after = Inf) %>% 
+  fct_count() %>% 
+  ggplot(., aes(f, n)) + 
+  geom_bar(stat = "identity")
+
+trees_low %>%
+  # filter(gat == "ŚW") %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_low_gps
+
+trees_low %>%
+  group_by(gat) %>%
+  filter(n() > 100) %>%
+  ungroup() %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_low_gps
+
+coordinates(trees_low_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_low_gps) <- "+init=epsg:4326" #adding WGS84 projection
+
+data(Europe, rivers)
+vistula <- subset(rivers, name == "Vistula")
+tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+  qtm(trees_low_gps, dots.alpha = 0.5) +
+  # tm_compass(position = c("left", "bottom")) +
+  # tm_scale_bar(position = c("left", "bottom")) + 
+  tm_style_white(title = "") +
+  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
+
+draw_map <- function(facet = FALSE) {
+  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+    qtm(trees_low_gps, dots.alpha = 0.5) +
+    # tm_compass(position = c("left", "bottom")) +
+    # tm_scale_bar(position = c("left", "bottom")) + 
+    tm_style_white(title = "")
+    if (facet == TRUE) 
+      map + tm_facets("gat", free.coords=TRUE, drop.units=TRUE) 
+  else 
+    map
+}
+
+
+
 
 # # joining files -----
 # sites_area <- dplyr::left_join(sites, plot_a, by = "nr_podpow") # joining sample plot area to site description
