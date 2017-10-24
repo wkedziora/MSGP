@@ -6,10 +6,11 @@ library(odbc)
 library(DBI)
 library(tidyverse)
 library(forcats)
+library(stringr)
 library(sp)
 library(ggmap)
 library(tmap)
-vignette("tmap-nutshell")
+# vignette("tmap-nutshell")
 
 ###
 ### Czego potrzebuję?
@@ -64,7 +65,7 @@ sites_raw %>%
   select(-nr_cyklu) %>%
   type_convert(., col_types = cols_only(gat_pan_pr = col_factor(levels = NULL))) -> sites # converting column to factor
 
-# lowest trees data loading and wrangling
+# lowest trees data loading and wrangling ------
 trees_low_col <- c("gat", "pokr", "uszk_rodz1", "uszk_proc1")
 trees_low_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -134,6 +135,112 @@ draw_map <- function(facet = FALSE) {
   else 
     map
 }
+
+# medium trees data loading and wrangling -----
+trees_medium_col <- c("gat", "uszk_rodz1", "uszk_proc1")
+trees_medium_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  filter(war == 1) %>%
+  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2, war)) %>%
+  mutate_at(trees_medium_col, funs(factor(.))) -> trees_medium # creating a new tibble
+summary(trees_medium)
+
+# str_c(levels(trees_medium$gat), collapse = "', '")
+levels(trees_medium$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.C', 'DB', 'DG', 
+                              'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JRZ.B', 'JS', 'JW', 'KL', 'KL', 'KL.T', 'KSZ', 
+                              'LP', 'MD', 'OL', 'OL', 'ORZ.C', 'ORZ.W', 'OS', 'SAL.FR.BU', 'SO', 'SO.B', 'SO.C', 
+                              'SO.K', 'SO.S', 'SO.W', 'SO.WE', 'ŚL', 'ŚL.A', 'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 
+                              'WIŚ', 'WZ', 'WZ', 'ŻWC.J')
+
+
+trees_medium %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+
+trees_medium$gat %>% 
+  factor() %>% 
+  fct_lump(n = 10) %>%
+  fct_infreq() %>% 
+  fct_relevel("Other", after = Inf) %>% 
+  fct_count() %>% 
+  ggplot(., aes(f, n)) + 
+  geom_bar(stat = "identity")
+
+trees_medium %>%
+  group_by(gat) %>%
+  filter(n() > 100) %>%
+  ungroup() %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_medium_gps
+
+coordinates(trees_medium_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_medium_gps) <- "+init=epsg:4326" #adding WGS84 projection
+
+tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+  qtm(trees_medium_gps, dots.alpha = 0.5) +
+  # tm_compass(position = c("left", "bottom")) +
+  # tm_scale_bar(position = c("left", "bottom")) + 
+  tm_style_white(title = "") +
+  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
+
+# high trees data loading and wrangling -----
+trees_high_col <- c("gat", "uszk_rodz1", "uszk_proc1")
+trees_high_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  filter(war == 1) %>%
+  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2, war)) %>%
+  mutate_at(trees_high_col, funs(factor(.))) -> trees_high # creating a new tibble
+summary(trees_high)
+
+# str_c(levels(trees_high$gat), collapse = "', '")
+levels(trees_high$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.BI', 'DB.C', 
+                            'DB', 'DG', 'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JS', 'JW', 'KL', 'KL', 'KSZ', 'LP', 
+                            'MD', 'OL', 'OL', 'OS', 'SO', 'SO.B', 'SO.C', 'SO.K', 'SO.L', 'SO.S', 'SO.WE', 'ŚL', 
+                            'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 'WZ', 'WZ')
+
+
+trees_high %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+
+trees_high$gat %>% 
+  factor() %>% 
+  fct_lump(n = 10) %>%
+  fct_infreq() %>% 
+  fct_relevel("Other", after = Inf) %>% 
+  fct_count() %>% 
+  ggplot(., aes(f, n)) + 
+  geom_bar(stat = "identity")
+
+trees_high %>%
+  group_by(gat) %>%
+  filter(n() > 100) %>%
+  ungroup() %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_high_gps
+
+coordinates(trees_high_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_high_gps) <- "+init=epsg:4326" #adding WGS84 projection
+
+tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+  qtm(trees_high_gps, dots.alpha = 0.5) +
+  # tm_compass(position = c("left", "bottom")) +
+  # tm_scale_bar(position = c("left", "bottom")) + 
+  tm_style_white(title = "") +
+  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
