@@ -1,6 +1,4 @@
-#############################################
-### Data import and tidy for MSc research ###
-#############################################
+### Data import and tidy for MSc research  -------------------------------------------------------------------------
 
 library(odbc)
 library(DBI)
@@ -34,12 +32,12 @@ vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a ref
 ### Do artykułu:
 # porównanie dwóch cykli
 
-# database connection -----
+# database connection -----------------------------------------------------------------------------------------------
 testdb <- file.path("D:\\Praca\\Badania\\WISL\\WISL_10lat_SGGW") # determining database filepath
 con <- dbConnect(odbc::odbc(), dsn = "WISL", encoding = "Windows-1250")# connecting to db
 # dbListTables(con) # listing all tables available in th database
 
-# data loading -----
+# data loading -------------------------------------------------------------------------------------------------------
 trees_05_raw <- dbReadTable(con, "DRZEWA_DO_05") # trees shorter than 0.5 m
 trees_05_3_raw <- dbReadTable(con, "DRZEWA_05_DO_3") # trees teller than 0.5 m and smaller than 3 cm dbh
 trees_3_7_raw <- dbReadTable(con, "DRZEWA_3_DO_7") # trees between 3 and 7 cm dbh
@@ -48,7 +46,8 @@ plot_raw <- dbReadTable(con, "POW_A_B") # sample plot data
 gps_coord_raw <- dbReadTable(con, "PUNKTY_TRAKTU") # GPS coordinates
 sites_raw <- dbReadTable(con, "ADRES_POW") # site description
 
-# general data wrangling -----
+# general data wrangling ---------------------------------------------------------------------------------------------
+
 # I am querying for area of sample plot needed later
 plot_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -72,7 +71,7 @@ sites_raw %>%
   dplyr::select(-nr_cyklu) %>%
   type_convert(., col_types = cols_only(gat_pan_pr = col_factor(levels = NULL))) -> sites # converting column to factor
 
-# lowest trees (h < 0.5 m) data loading and wrangling ------
+# lowest trees (h < 0.5 m) data loading and wrangling ----------------------------------------------------------------
 trees_05_col <- c("gat", "pokr", "war", "uszk_rodz1", "uszk_proc1")
 trees_05_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -93,7 +92,7 @@ trees_05$pokr <- factor(trees_05$pokr, ordered = TRUE, levels = c("+", "1", "5",
 
 
 # checking if there is any sample plot with dubbled species
-trees_05 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+# trees_05 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
 trees_05$gat %>% 
   factor() %>% 
@@ -110,11 +109,21 @@ trees_05$gat %>%
 #   left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
 
 # data for species that are more abundant
+f <- . %>% 
+  group_by(gat) %>%
+  filter(n() > 100) %>%
+  ungroup() %>%
+  left_join(., gps_coord, by = "nr_punktu")
+
+f(trees_05)
+
 trees_05 %>%
   group_by(gat) %>%
   filter(n() > 100) %>%
   ungroup() %>%
   left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
+
+trees_05_gps <- making_gps(trees_05)
 
 coordinates(trees_05_gps) <- ~ lon + lat #adding sptial relationship
 proj4string(trees_05_gps) <- "+init=epsg:4326" #adding WGS84 projection
@@ -128,8 +137,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
   tm_style_white(title = "") +
   tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
 
-## ## ## ## ## ## ## ## ## ## ## ## ## ##
-# medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----
+# medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----------------------------------------------------
 
 trees_05_3_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_05_3_raw %>% # raw data loading to pipe
@@ -170,7 +178,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
   tm_style_white(title = "") +
   tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
 
-# high trees (3 cm < dbh < 7 cm) data loading and wrangling -----
+# high trees (3 cm < dbh < 7 cm) data loading and wrangling ---------------------------------------------------------
 trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_3_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -214,7 +222,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 
 
 
-# highest trees (dbh > 7 cm) data loading and wrangling -----
+# highest trees (dbh > 7 cm) data loading and wrangling -------------------------------------------------------------
 trees_7_col <- c("gat", "war")
 trees_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -255,9 +263,8 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
   tm_style_white(title = "") +
   tm_facets("gat", free.coords = TRUE, drop.units = TRUE)
 
-# #############
-# ### MAPKI ### 
-# #############
+
+# ### MAPKI  -------------------------------------------------------------------------------------------------------
 # 
 # # devtools::install_github("nowosad/geostatbook")
 # library('sp')
@@ -269,9 +276,9 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 # library('dismo')
 # library('rgeos')
 # library('ggplot2')
-# ############
-# ### Loading and projecting data from MS Access DB
-# ############
+
+# ### Loading and projecting data from MS Access DB  --------------------------------------------------------------
+
 # punkty <- readOGR(dsn="dane", layer="punkty2")
 # punkty92 <- spTransform(punkty, CRS("+init=epsg:2180"))
 # rdlp <- readOGR(dsn='dane', layer='Rdlp')
@@ -302,7 +309,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 # plot(x) 
 
 
-# # generating raster density map -----
+# # generating raster density map ----------------------------------------------------------------------------------------------
 # # test for one species
 # trees_7 %>%
 #   filter(gat == "JD") %>%
@@ -325,23 +332,25 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 #   # tm_scale_bar(position = c("left", "bottom")) + 
 #   tm_style_white(title = "") 
 
-making_gps <- function(x, y) {
-  eval(parse(text=x), envir=.GlobalEnv) %>% # find a better solution
-  filter(gat == y) %>%
-  left_join(., gps_coord, by = "nr_punktu") -> y
+# function that filters species and add GPS position to a sample plot
+add_gps <- function(dataset, col_name = "gat") {
+  dataset %>% 
+    group_by_(col_name) %>% 
+    filter(n() > 100) %>%
+    ungroup() %>%
+    left_join(., gps_coord, by = "nr_punktu") -> y
   coordinates(y) <- ~ lon + lat #adding sptial relationship
   proj4string(y) <- "+init=epsg:4326" #adding WGS84 projection
   return(y)
 }
 
-loop <- c("trees_7", "trees_05")
-testing <- sapply(loop, making_gps, y = "JD")
+add_gps(trees_05)
 
+loop <- list(trees_05, trees_05_3)
 
-test <- c("trees_7")
-testing <- making_gps(test, "JD")
+testing <- lapply(loop, add_gps)
 
-qtm(testing[[2]])
+qtm(testing[[1]])
  
 draw_map <- function(facet = FALSE) {
   map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
@@ -356,23 +365,26 @@ draw_map <- function(facet = FALSE) {
     map
 }
 
-tm1 <- qtm(Europe, fill = "red")
-tm2 <- qtm(Europe, fill = "blue")
-tmap_arrange(tm1, tm2, asp = NA)
 
-mapka <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  # tm_compass(position = c("left", "bottom")) +
+
+mapka <- 
+  tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4)
+  # tm_shape(subset(trees_05_gps, gat == "JD")) + tm_dots(alpha = 0.5)
+  # tm_layout(panel.show = TRUE, panel.labels = "aaa")
+  # tm_compass(position = c("left", "bottom")) 
   # tm_scale_bar(position = c("left", "bottom")) + 
-  tm_style_white(title = "")
+
   
-  
-map1 <- mapka + qtm(trees_05_gps, dots.alpha = 0.5)
-map2 <- mapka + qtm(trees_05_3_gps, dots.alpha = 0.5)
-map3 <- mapka + qtm(trees_3_7_gps, dots.alpha = 0.5)
-map4 <- mapka + qtm(trees_7_gps, dots.alpha = 0.5)  
-tmap_arrange(map1, map2, map3, map4, asp = NA)  
+draw_maps2 <- function(x){  
+map1 <- mapka + qtm(subset(trees_05_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "<0.5m")
+map2 <- mapka + qtm(subset(trees_05_3_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">0.5m&<3cm")
+map3 <- mapka + qtm(subset(trees_3_7_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "3cm<dbh<7cm")
+map4 <- mapka + qtm(subset(trees_7_gps, g == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">7cm")  
+tmap_arrange(map1, map2, map3, map4, asp = NA) 
+}
+
+draw_maps2("JD")
 
 
 
-tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
