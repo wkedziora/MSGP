@@ -35,20 +35,20 @@ vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a ref
 # porównanie dwóch cykli
 
 # database connection -----
-testdb <- file.path("D:\\Praca\\Badania\\WISL\\WISL_10lat_SGGW") #determining database filepath
-con <- dbConnect(odbc::odbc(), dsn = "WISL", encoding = "Windows-1250")#connecting to db
-# dbListTables(con) #listing all tables available in th database
+testdb <- file.path("D:\\Praca\\Badania\\WISL\\WISL_10lat_SGGW") # determining database filepath
+con <- dbConnect(odbc::odbc(), dsn = "WISL", encoding = "Windows-1250")# connecting to db
+# dbListTables(con) # listing all tables available in th database
 
 # data loading -----
-trees_05_raw <- dbReadTable(con, "DRZEWA_DO_05") #trees below 0.5 m tall
-trees_05_3_raw <- dbReadTable(con, "DRZEWA_05_DO_3") #trees between 0.5 m tall and 3 cm dbh
-trees_3_7_raw <- dbReadTable(con, "DRZEWA_3_DO_7") #trees between 3 and 7 cm dbh
-trees_7_raw <- dbReadTable(con, "DRZEWA_OD_7") #trees between 3 and 7 cm dbh
-plot_raw <- dbReadTable(con, "POW_A_B") #plot data
+trees_05_raw <- dbReadTable(con, "DRZEWA_DO_05") # trees shorter than 0.5 m
+trees_05_3_raw <- dbReadTable(con, "DRZEWA_05_DO_3") # trees teller than 0.5 m and smaller than 3 cm dbh
+trees_3_7_raw <- dbReadTable(con, "DRZEWA_3_DO_7") # trees between 3 and 7 cm dbh
+trees_7_raw <- dbReadTable(con, "DRZEWA_OD_7") # trees above 7 cm dbh
+plot_raw <- dbReadTable(con, "POW_A_B") # sample plot data
 gps_coord_raw <- dbReadTable(con, "PUNKTY_TRAKTU") # GPS coordinates
-sites_raw <- dbReadTable(con, "ADRES_POW") #site description
+sites_raw <- dbReadTable(con, "ADRES_POW") # site description
 
-# data wrangling -----
+# general data wrangling -----
 # I am querying for area of sample plot needed later
 plot_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -72,7 +72,7 @@ sites_raw %>%
   select(-nr_cyklu) %>%
   type_convert(., col_types = cols_only(gat_pan_pr = col_factor(levels = NULL))) -> sites # converting column to factor
 
-# lowest trees data loading and wrangling ------
+# lowest trees (h < 0.5 m) data loading and wrangling ------
 trees_05_col <- c("gat", "pokr", "war", "uszk_rodz1", "uszk_proc1")
 trees_05_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -80,7 +80,7 @@ trees_05_raw %>% # raw data loading to pipe
   rename_all(tolower) %>%
   # filter(war == 1) %>% # we want both trees and bushes therefore no filter here
   dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
-  mutate_at(trees_low_col, funs(factor(.))) -> trees_05 # creating a new tibble
+  mutate_at(trees_05_col, funs(factor(.))) -> trees_05 # creating a new tibble
 summary(trees_05)
 
 # str_c(levels(trees_05$gat), collapse = "', '")
@@ -144,7 +144,7 @@ draw_map <- function(facet = FALSE) {
     map
 }
 
-# medium trees data loading and wrangling -----
+# medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----
 trees_05_3_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_05_3_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -152,7 +152,7 @@ trees_05_3_raw %>% # raw data loading to pipe
   rename_all(tolower) %>%
   # filter(war == 1) %>%
   select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
-  mutate_at(trees_medium_col, funs(factor(.))) -> trees_05_3 # creating a new tibble
+  mutate_at(trees_05_3_col, funs(factor(.))) -> trees_05_3 # creating a new tibble
 summary(trees_05_3)
 
 # str_c(levels(trees_05_3$gat), collapse = "', '")
@@ -191,7 +191,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
   tm_style_white(title = "") +
   tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
 
-# high trees data loading and wrangling -----
+# high trees (3 cm < dbh < 7 cm) data loading and wrangling -----
 trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_3_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -199,7 +199,7 @@ trees_3_7_raw %>% # raw data loading to pipe
   rename_all(tolower) %>%
   # filter(war == 1) %>%
   select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
-  mutate_at(trees_high_col, funs(factor(.))) -> trees_3_7 # creating a new tibble
+  mutate_at(trees_3_7_col, funs(factor(.))) -> trees_3_7 # creating a new tibble
 summary(trees_3_7)
 
 # str_c(levels(trees_3_7$gat), collapse = "', '")
@@ -248,7 +248,52 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 # r = raster(k)
 # plot(r)
 
+# highest trees (dbh > 7 cm) data loading and wrangling -----
+trees_7_col <- c("gat", "war")
+trees_7_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  # filter(war == 1) %>%
+  select(nr_punktu, nr_cyklu, nr_podpow, gat, wiek, war, azymut, odl, h, d13) %>%
+  mutate_at(trees_7_col, funs(factor(.))) %>%
+  type_convert(col_types = cols_only(nr_punktu = "i"))-> trees_7 # creating a new tibble
+summary(trees_7)
 
+# str_c(levels(trees_7$gat), collapse = "', '")
+# levels(trees_3_7$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.BI', 'DB.C', 
+#                             'DB', 'DG', 'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JS', 'JW', 'KL', 'KL', 'KSZ', 'LP', 
+#                             'MD', 'OL', 'OL', 'OS', 'SO', 'SO.B', 'SO.C', 'SO.K', 'SO.L', 'SO.S', 'SO.WE', 'ŚL', 
+#                             'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 'WZ', 'WZ')
+
+
+trees_7 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+
+trees_7$gat %>% 
+  factor() %>% 
+  fct_lump(n = 10) %>%
+  fct_infreq() %>% 
+  fct_relevel("Other", after = Inf) %>% 
+  fct_count() %>% 
+  ggplot(., aes(f, n)) + 
+  geom_bar(stat = "identity")
+
+trees_7 %>%
+  group_by(gat) %>%
+  filter(n() > 100) %>%
+  ungroup() %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_7_gps
+
+coordinates(trees_3_7_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_3_7_gps) <- "+init=epsg:4326" #adding WGS84 projection
+
+tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+  qtm(trees_3_7_gps, dots.alpha = 0.5) +
+  # tm_compass(position = c("left", "bottom")) +
+  # tm_scale_bar(position = c("left", "bottom")) + 
+  tm_style_white(title = "") +
+  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
 
 
 
