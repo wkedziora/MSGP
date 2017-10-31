@@ -8,9 +8,11 @@ library(tidyverse)
 library(forcats)
 library(stringr)
 library(sp)
-library(ggmap)
+# library(ggmap)
 library(tmap)
 # vignette("tmap-nutshell")
+data(Europe, rivers) # loading data of Europe to plot it later as a background
+vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
 
 ###
 ### Czego potrzebuję?
@@ -28,15 +30,20 @@ library(tmap)
 # 5. Pokazanie składu gatunkowego pierwszego piętra.
 # 6. Sprawdzić udziały dla poszczególnych powierzchni próbnych.
 
+###
+### Do artykułu:
+# porównanie dwóch cykli
+
 # database connection -----
 testdb <- file.path("D:\\Praca\\Badania\\WISL\\WISL_10lat_SGGW") #determining database filepath
 con <- dbConnect(odbc::odbc(), dsn = "WISL", encoding = "Windows-1250")#connecting to db
 # dbListTables(con) #listing all tables available in th database
 
 # data loading -----
-trees_low_raw <- dbReadTable(con, "DRZEWA_DO_05") #trees below 0.5 m tall
-trees_medium_raw <- dbReadTable(con, "DRZEWA_05_DO_3") #trees between 0.5 m tall and 3 cm dbh
-trees_high_raw <- dbReadTable(con, "DRZEWA_3_DO_7") #trees between 3 and 7 cm dbh
+trees_05_raw <- dbReadTable(con, "DRZEWA_DO_05") #trees below 0.5 m tall
+trees_05_3_raw <- dbReadTable(con, "DRZEWA_05_DO_3") #trees between 0.5 m tall and 3 cm dbh
+trees_3_7_raw <- dbReadTable(con, "DRZEWA_3_DO_7") #trees between 3 and 7 cm dbh
+trees_7_raw <- dbReadTable(con, "DRZEWA_OD_7") #trees between 3 and 7 cm dbh
 plot_raw <- dbReadTable(con, "POW_A_B") #plot data
 gps_coord_raw <- dbReadTable(con, "PUNKTY_TRAKTU") # GPS coordinates
 sites_raw <- dbReadTable(con, "ADRES_POW") #site description
@@ -66,58 +73,59 @@ sites_raw %>%
   type_convert(., col_types = cols_only(gat_pan_pr = col_factor(levels = NULL))) -> sites # converting column to factor
 
 # lowest trees data loading and wrangling ------
-trees_low_col <- c("gat", "pokr", "uszk_rodz1", "uszk_proc1")
-trees_low_raw %>% # raw data loading to pipe
+trees_05_col <- c("gat", "pokr", "war", "uszk_rodz1", "uszk_proc1")
+trees_05_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  filter(war == 1) %>%
-  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2, war)) %>%
-  mutate_at(trees_low_col, funs(factor(.))) -> trees_low # creating a new tibble
-summary(trees_low)
+  # filter(war == 1) %>% # we want both trees and bushes therefore no filter here
+  dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
+  mutate_at(trees_low_col, funs(factor(.))) -> trees_05 # creating a new tibble
+summary(trees_05)
 
-# str_c(levels(DRZEWA_DO_05_filter_gps$GAT), collapse = "', '")
-levels(trees_low$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CZR', 'CZR', 'DB', 'DB', 'DB.C', 'DB', 'DG', 'GB', 'GR', 'IWA', 
-                     'JB', 'JD', 'JKL', 'JS', 'JW', 'KL', 'KL', 'KL.T', 'KSZ', 'LP', 'MD', 'OL', 'OL', 'OS', 'SO', 
-                     'SO.B', 'SO.C', 'SO.K', 'SO.S', 'SO.WE', 'ŚL', 'ŚL.A', 'ŚL.L', 'ŚW', 'TP', 'TP.C', 'WB', 'WB.NO', 
-                     'WIŚ', 'WZ', 'WZ.P')
+# str_c(levels(trees_05$gat), collapse = "', '")
+# levels(trees_05$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CZR', 'CZR', 'DB', 'DB', 'DB.C', 'DB', 'DG', 'GB', 'GR', 'IWA', 
+                     # 'JB', 'JD', 'JKL', 'JS', 'JW', 'KL', 'KL', 'KL.T', 'KSZ', 'LP', 'MD', 'OL', 'OL', 'OS', 'SO', 
+                     # 'SO.B', 'SO.C', 'SO.K', 'SO.S', 'SO.WE', 'ŚL', 'ŚL.A', 'ŚL.L', 'ŚW', 'TP', 'TP.C', 'WB', 'WB.NO', 
+                     # 'WIŚ', 'WZ', 'WZ.P')
 
-trees_low$pokr <- factor(trees_low$pokr, ordered = TRUE, levels = c("+", "1", "5", "10", "15", "20", "25", "30", "35", "40", "45",
+trees_05$pokr <- factor(trees_05$pokr, ordered = TRUE, levels = c("+", "1", "5", "10", "15", "20", "25", "30", "35", "40", "45",
                                                                 "50", "55", "60", "65", "70", "75", "80", "85", "90", 
                                                                 "95", "100"))
 
 
 
 # checking if there is any sample plot with dubbled species
-trees_low %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+trees_05 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
-trees_low$gat %>% 
+trees_05$gat %>% 
   factor() %>% 
-  fct_lump(n = 10) %>% 
+  fct_lump(n = 10) %>%
   fct_infreq() %>% 
   fct_relevel("Other", after = Inf) %>% 
   fct_count() %>% 
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
-trees_low %>%
-  # filter(gat == "ŚW") %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_low_gps
+# test for one species
+trees_05 %>%
+  filter(gat == "CZM.P") %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
 
-trees_low %>%
+# data for species that are more abundant
+trees_05 %>%
   group_by(gat) %>%
   filter(n() > 100) %>%
   ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_low_gps
+  left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
 
-coordinates(trees_low_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_low_gps) <- "+init=epsg:4326" #adding WGS84 projection
+coordinates(trees_05_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_05_gps) <- "+init=epsg:4326" #adding WGS84 projection
 
-data(Europe, rivers)
-vistula <- subset(rivers, name == "Vistula")
+
 tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_low_gps, dots.alpha = 0.5) +
+  qtm(trees_05_gps, dots.alpha = 0.5) +
   # tm_compass(position = c("left", "bottom")) +
   # tm_scale_bar(position = c("left", "bottom")) + 
   tm_style_white(title = "") +
@@ -126,7 +134,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 draw_map <- function(facet = FALSE) {
   map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
     tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-    qtm(trees_low_gps, dots.alpha = 0.5) +
+    qtm(trees_05_gps, dots.alpha = 0.5) +
     # tm_compass(position = c("left", "bottom")) +
     # tm_scale_bar(position = c("left", "bottom")) + 
     tm_style_white(title = "")
@@ -137,27 +145,27 @@ draw_map <- function(facet = FALSE) {
 }
 
 # medium trees data loading and wrangling -----
-trees_medium_col <- c("gat", "uszk_rodz1", "uszk_proc1")
-trees_medium_raw %>% # raw data loading to pipe
+trees_05_3_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
+trees_05_3_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  filter(war == 1) %>%
-  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2, war)) %>%
-  mutate_at(trees_medium_col, funs(factor(.))) -> trees_medium # creating a new tibble
-summary(trees_medium)
+  # filter(war == 1) %>%
+  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
+  mutate_at(trees_medium_col, funs(factor(.))) -> trees_05_3 # creating a new tibble
+summary(trees_05_3)
 
-# str_c(levels(trees_medium$gat), collapse = "', '")
-levels(trees_medium$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.C', 'DB', 'DG', 
-                              'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JRZ.B', 'JS', 'JW', 'KL', 'KL', 'KL.T', 'KSZ', 
-                              'LP', 'MD', 'OL', 'OL', 'ORZ.C', 'ORZ.W', 'OS', 'SAL.FR.BU', 'SO', 'SO.B', 'SO.C', 
-                              'SO.K', 'SO.S', 'SO.W', 'SO.WE', 'ŚL', 'ŚL.A', 'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 
-                              'WIŚ', 'WZ', 'WZ', 'ŻWC.J')
+# str_c(levels(trees_05_3$gat), collapse = "', '")
+# levels(trees_05_3$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.C', 'DB', 'DG', 
+#                               'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JRZ.B', 'JS', 'JW', 'KL', 'KL', 'KL.T', 'KSZ', 
+#                               'LP', 'MD', 'OL', 'OL', 'ORZ.C', 'ORZ.W', 'OS', 'SAL.FR.BU', 'SO', 'SO.B', 'SO.C', 
+#                               'SO.K', 'SO.S', 'SO.W', 'SO.WE', 'ŚL', 'ŚL.A', 'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 
+#                               'WIŚ', 'WZ', 'WZ', 'ŻWC.J')
 
 
-trees_medium %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+trees_05_3 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
-trees_medium$gat %>% 
+trees_05_3$gat %>% 
   factor() %>% 
   fct_lump(n = 10) %>%
   fct_infreq() %>% 
@@ -166,44 +174,44 @@ trees_medium$gat %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
-trees_medium %>%
+trees_05_3 %>%
   group_by(gat) %>%
   filter(n() > 100) %>%
   ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_medium_gps
+  left_join(., gps_coord, by = "nr_punktu") -> trees_05_3_gps
 
-coordinates(trees_medium_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_medium_gps) <- "+init=epsg:4326" #adding WGS84 projection
+coordinates(trees_05_3_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_05_3_gps) <- "+init=epsg:4326" #adding WGS84 projection
 
 tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_medium_gps, dots.alpha = 0.5) +
+  qtm(trees_05_3_gps, dots.alpha = 0.5) +
   # tm_compass(position = c("left", "bottom")) +
   # tm_scale_bar(position = c("left", "bottom")) + 
   tm_style_white(title = "") +
   tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
 
 # high trees data loading and wrangling -----
-trees_high_col <- c("gat", "uszk_rodz1", "uszk_proc1")
-trees_high_raw %>% # raw data loading to pipe
+trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
+trees_3_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  filter(war == 1) %>%
-  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2, war)) %>%
-  mutate_at(trees_high_col, funs(factor(.))) -> trees_high # creating a new tibble
-summary(trees_high)
+  # filter(war == 1) %>%
+  select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
+  mutate_at(trees_high_col, funs(factor(.))) -> trees_3_7 # creating a new tibble
+summary(trees_3_7)
 
-# str_c(levels(trees_high$gat), collapse = "', '")
-levels(trees_high$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.BI', 'DB.C', 
-                            'DB', 'DG', 'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JS', 'JW', 'KL', 'KL', 'KSZ', 'LP', 
-                            'MD', 'OL', 'OL', 'OS', 'SO', 'SO.B', 'SO.C', 'SO.K', 'SO.L', 'SO.S', 'SO.WE', 'ŚL', 
-                            'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 'WZ', 'WZ')
+# str_c(levels(trees_3_7$gat), collapse = "', '")
+# levels(trees_3_7$gat) <- c('AK', 'BK', 'BRZ', 'BRZ', 'BST', 'CIS', 'CZR', 'CZR', 'DB', 'DB', 'DB.BI', 'DB.C', 
+#                             'DB', 'DG', 'GB', 'GR', 'IWA', 'JB', 'JD', 'JKL', 'JS', 'JW', 'KL', 'KL', 'KSZ', 'LP', 
+#                             'MD', 'OL', 'OL', 'OS', 'SO', 'SO.B', 'SO.C', 'SO.K', 'SO.L', 'SO.S', 'SO.WE', 'ŚL', 
+#                             'ŚL.L', 'ŚW', 'TP', 'WB', 'WB.K', 'WB.NO', 'WZ', 'WZ')
 
 
-trees_high %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
+trees_3_7 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
-trees_high$gat %>% 
+trees_3_7$gat %>% 
   factor() %>% 
   fct_lump(n = 10) %>%
   fct_infreq() %>% 
@@ -212,18 +220,18 @@ trees_high$gat %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
-trees_high %>%
+trees_3_7 %>%
   group_by(gat) %>%
   filter(n() > 100) %>%
   ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_high_gps
+  left_join(., gps_coord, by = "nr_punktu") -> trees_3_7_gps
 
-coordinates(trees_high_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_high_gps) <- "+init=epsg:4326" #adding WGS84 projection
+coordinates(trees_3_7_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_3_7_gps) <- "+init=epsg:4326" #adding WGS84 projection
 
 tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_high_gps, dots.alpha = 0.5) +
+  qtm(trees_3_7_gps, dots.alpha = 0.5) +
   # tm_compass(position = c("left", "bottom")) +
   # tm_scale_bar(position = c("left", "bottom")) + 
   tm_style_white(title = "") +
@@ -232,73 +240,13 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-# # joining files -----
-# sites_area <- dplyr::left_join(sites, plot_a, by = "nr_podpow") # joining sample plot area to site description
-# sites_area_gps <- dplyr::left_join(sites_area, gps_coord, by = "nr_punktu") # adding GPS position data
+# generating raster density map -----
+# library(MASS)
+# k = kde2d(trees_05_gps$lon, trees_05_gps$lat, h = 0.4, n = 100)
 # 
-# # exporting data ----- 
-# write_tsv(sites_area_gps, "sites_area_gps.txt") # saving tabular format for later analysis
-# write_tsv(trees, "trees.txt")
-
-trees_low %>% 
-  count(gat, pokr) %>%  
-  ggplot(mapping = aes(x = gat, y = pokr)) +
-  geom_tile(mapping = aes(fill = n))
-
-ggplot(data = trees_low) +
-  geom_count(mapping = aes(x = gat, y = pokr))
- 
-
-##########
-### Ujednolicenie nazw gatunków dominujących
-##########
-
-levels(dane$GAT_PAN_PR) <- c("", "AK", "BEZ.C", "BK", "BRZ", "BRZ.O", "BST", "CYP.L", "CZM", "CZM.P", "CZR", 
-                        "DB", "DB", "DB.C", "DB", "DER", "DER", "DER", "DG", "GB", "GŁG", "GR",
-                        "IWA", "JB", "JD", "JKL", "JRZ", "JS", "JW", "KL", "LP", "LSZ", "MD", "OL", "OL", 
-                        "OS", "SO", "SO", "SO.B", "SO.C", "SO.K", "SO.WE", "ŚL", "ŚW", "TP", "TP", "WB", 
-                        "WB.NO", "WZ")
-
-##########
-### Ujednolicenie nazw gatunków w dolnych warstwach
-##########
-
-levels(dane$GAT_DO_05) <- c("", "AK", "BK", "BRZ", "BRZ", "BST", "CIS", "CZR", "CZR", "DB", "DB", "DB.C", 
-                             "DB", "DB", "GB", "GR", "IWA", "JB", "JD", "JKL", "JS", "JW", "KL", "KL", "KL",
-                             "KSZ",  "LP", "MD", "OL", "OL", "OS", "SO", "SO.K", "SO.S", "SO.WE", "ŚL", "ŚL", "ŚW",
-                             "TP", "WB", "WB.NO", "WZ", "WZ")
-
-levels(dane$GAT_05_DO_3) <- c("", "AK", "BK", "BRZ", "BRZ", "BST", "CIS", "CZR", "CZR", "DB", "DB", "DB",
-                               "DB.C", "DB", "DG", "GB", "GB ", "GR", "IWA", "JB", "JD", "JKL", "JS", "JW", "KL", 
-                               "KL", "KL", "KSZ", "LP", "MD", "OL", "OL", "OS", "SO", "SO.B", "SO.C", "SO.K", 
-                               "SO.S", "SO.WE", "ŚL", "ŚL", "ŚW", "TP", "WB", "WB.NO", "WIŚ", "WZ", "WZ" )
-
-levels(dane$GAT_3_DO_7) <- c("",   "AK", "BK", "BRZ", "BRZ.O", "CIS", "CZR", "CZR.P", "DB", "DB.B", "DB.C", "DB.S", 
-                              "DG", "GB", "GR", "IWA", "JB", "JD", "JKL", "JS", "JW", "KL", "KL.P", "KSZ", "LP", 
-                              "MD", "OL", "OL.S", "OS", "PLA.K", "SO", "SO.B", "SO.C", "SO.K", "SO.S", "SO.W", "SO.WE",
-                              "ŚL.A", "ŚL.L", "ŚW", "WB", "WB.NO", "WIŚ", "WZ", "WZ.P" )
-#########
-# wybór powierzchni z panującą sosną oraz pozbycie się upraw
-#########
-
-dane %>%
-  filter(GAT_PAN_PR == "SO" & POW_A_B_NR_CYKLU == 1 & WIEK_PAN_PR > 20) -> dane1
-
-dane %>%
-  filter(GAT_PAN_PR == "SO" & WIEK_PAN_PR > 20) -> dane2
+# library(raster)
+# r = raster(k)
+# plot(r)
 
 
 
@@ -311,46 +259,7 @@ dane %>%
 
 
 
-##########
-### Grupowanie gatunkami
-##########
 
-dane2 %>%
-  group_by(GAT_DO_05) %>%
-  summarise(n = n_distinct(NR_PODPOW)) %>%
-  filter(GAT_DO_05 != "") %>%
-  arrange(desc(n)) %>%
-  rename(gat = GAT_DO_05)  -> gat_do_05
-
-dane2 %>%
-  group_by(GAT_05_DO_3) %>%
-  summarise(n = n_distinct(NR_PODPOW)) %>%
-  filter(GAT_05_DO_3 != "") %>%
-  arrange(desc(n)) %>%
-  rename(gat = GAT_05_DO_3)  -> gat_do_3
-
-dane2 %>%
-  group_by(GAT_3_DO_7) %>%
-  summarise(n = n_distinct(NR_PODPOW)) %>%
-  filter(GAT_3_DO_7 != "") %>%
-  arrange(desc(n)) %>%
-  rename(gat = GAT_3_DO_7) -> gat_do_7
-
-tabela <- full_join(full_join(gat_do_05, gat_do_3, by = "gat"), gat_do_7, by = "gat")
-names(tabela) <- c("gat", "gat_do_05", "gat_do_3", "gat_do_7")
-tabela$gat <- factor(tabela$gat, levels = tabela$gat[order(-tabela$gat_do_3)])
-# levels(tabela$gat) <- c("DB", "SO", "BRZ", "DB", "BK", "GB", "DB", "ŚW", "JW", "OS", "obce-liś", "KL", "JD", "LP", 
-# "AK", "JS", "CZR", "WZ", "MD", "OL", "OL", "ŚL", "BRZ", "IWA", "JKL", "obce-igl", "obce-igl", "WB", 
-# "CZR.P", "KL.P", "DB", "KSZ", "obce-igl", "ŚL.L", "TP", "WB.NO", "GR", "obce-igl", "DB.BU", "JB", "WIŚ", "obce-igl", "obce-igl" )
-tabela <- tabela[1:10,]
-tabela <- arrange(tabela, desc(gat_do_05))
-
-tabela2 <- gather(tabela, "wys", "n", 2:4)
-
-ggplot(data = tabela2, aes(x = gat, y = n, fill = gat)) + 
-  geom_bar(stat="identity", position = "dodge") + 
-  facet_grid(~ wys) + 
-  theme_minimal()
 
 ##########
 ### Grupowanie krainami
@@ -385,26 +294,6 @@ library('ggplot2')
 ############
 ### Loading and projecting data from MS Access DB
 ############
-
-# dane_punktowe <- read.csv2("dane/gps.csv", dec = ".") #data loading
-# str(dane_punktowe) #data structure
-# head(dane_punktowe) #data first 6 rows
-# colnames(dane_punktowe) <- c("nr", "rok", "szer", "dl") #data columns name change
-# coordinates(dane_punktowe) <- ~ dl + szer #adding sptial relationship
-# proj4string(dane_punktowe) <- "+init=epsg:4326" #adding WGS84 projection
-# summary(dane_punktowe)
-# # plot(dane_punktowe)
-# writeOGR(dane_punktowe, dsn="dane", layer="punkty", driver="ESRI Shapefile") #saving projected file
-
-# dane_punktowe <- read.csv2("dane/gps2.csv", dec = ".")
-# colnames(dane_punktowe) <- c("nr", "rok", "szer", "dl")
-# dane_punktowe %>%
-#   filter(dl > 20 & dl < 21 & szer > 50 & szer < 51) -> punkty2
-# coordinates(punkty2) <- ~ dl + szer
-# proj4string(punkty2) <- "+init=epsg:4326"
-# plot(punkty2)
-# writeOGR(punkty2, dsn="dane", layer="punkty2", driver="ESRI Shapefile") #saving projected file
-
 punkty <- readOGR(dsn="dane", layer="punkty2")
 punkty92 <- spTransform(punkty, CRS("+init=epsg:2180"))
 rdlp <- readOGR(dsn='dane', layer='Rdlp')
