@@ -38,10 +38,19 @@ draw_map <- function(dataframe, facet = FALSE) {
     map
 }
 
+wykres <- . %>% 
+  factor() %>% 
+  fct_lump(n = 10) %>%
+  fct_infreq() %>%
+  fct_relevel("Other", after = Inf) %>%
+  fct_count() 
+  # ggplot(., aes(f, n)) +
+  # geom_bar(stat = "identity")
+
 ###
 ### Czego potrzebuję?
-# 1. Wybieram Wszystkie punkty z drugiego cyklu w których sosna dominuje
-# 2. Łączę je z danymi o poszczególnych (3) warstwach i danych GPS - pomyśleć o sensownym nazewnictwie
+# 1. Wybieram Wszystkie punkty z drugiego cyklu
+# 2. Łączę je z danymi o poszczególnych (3) warstwach i danych GPS 
 # 3. Mapka wszystkich powierzchni próbnych zajętych w danej warstwie - heatmap?
 # 4. Wykres pokazujący udział gatunków, stopień pokrycia i rodzaje uszkodzeń.
 # 5. Do wykresów mapki dla kraju.
@@ -120,12 +129,7 @@ trees_05$pokr <- factor(trees_05$pokr, ordered = TRUE, levels = c("+", "1", "5",
 # checking if there is any sample plot with dubbled species
 # trees_05 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
-trees_05$gat %>% 
-  factor() %>% 
-  fct_lump(n = 10) %>%
-  fct_infreq() %>% 
-  fct_relevel("Other", after = Inf) %>% 
-  fct_count() %>% 
+wykres(trees_05$gat) %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
@@ -154,12 +158,7 @@ trees_05_3_raw %>% # raw data loading to pipe
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_05_3 # creating a new tibble
 summary(trees_05_3)
 
-trees_05_3$gat %>% 
-  factor() %>% 
-  fct_lump(n = 10) %>%
-  fct_infreq() %>% 
-  fct_relevel("Other", after = Inf) %>% 
-  fct_count() %>% 
+wykres(trees_05_3$gat) %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
@@ -182,12 +181,7 @@ trees_3_7_raw %>% # raw data loading to pipe
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_3_7 # creating a new tibble
 summary(trees_3_7)
 
-trees_3_7$gat %>% 
-  factor() %>% 
-  fct_lump(n = 10) %>%
-  fct_infreq() %>% 
-  fct_relevel("Other", after = Inf) %>% 
-  fct_count() %>% 
+wykres(trees_3_7$gat) %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
@@ -202,7 +196,7 @@ trees_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  filter(war == 2) %>%
+  filter(war == 2 | war == 3) %>%
   dplyr::select(nr_punktu, nr_cyklu, nr_podpow, gat, wiek, war, azymut, odl, h, d13) %>%
   mutate_at(trees_7_col, funs(factor(.))) %>%
   type_convert(col_types = cols_only(nr_punktu = "i")) %>%
@@ -211,15 +205,9 @@ trees_7_raw %>% # raw data loading to pipe
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_7 # creating a new tibble
 summary(trees_7)
 
-trees_7$gat %>% 
-  factor() %>% 
-  fct_lump(n = 10) %>%
-  fct_infreq() %>% 
-  fct_relevel("Other", after = Inf) %>% 
-  fct_count() %>% 
+wykres(trees_7$gat) %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
-
 trees_7_gps <- add_gps(trees_7)
 
 draw_map(trees_7_gps)
@@ -227,50 +215,6 @@ draw_map(trees_7_gps, facet = TRUE)
 
 
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
-# 
-# # devtools::install_github("nowosad/geostatbook")
-# library('sp')
-# library('rgdal')
-# library('dplyr')
-# library('proj4')
-# library('raster')
-# library('gstat')
-# library('dismo')
-# library('rgeos')
-# library('ggplot2')
-
-# ### Loading and projecting data from MS Access DB  --------------------------------------------------------------
-
-# punkty <- readOGR(dsn="dane", layer="punkty2")
-# punkty92 <- spTransform(punkty, CRS("+init=epsg:2180"))
-# rdlp <- readOGR(dsn='dane', layer='Rdlp')
-# # plot(rdlp)
-# # plot(punkty92, add = TRUE)
-# 
-# punkty92$id <- 1:nrow(punkty92)
-# # spplot(punkty92, 'id', colorkey=TRUE)
-# 
-# siatka_n <- raster(extent(gBuffer(punkty92, width = 500)))
-# res(siatka_n) <- c(3000, 3000)
-# siatka_n[] <- 0
-# proj4string(siatka_n) <- CRS(proj4string(punkty92))
-# siatka_n <- as(siatka_n, 'SpatialPolygonsDataFrame')
-# siatka_n <- siatka_n[!is.na(siatka_n@data$layer), ]
-# plot(siatka_n)
-# # plot(punkty92)#, add=TRUE)
-# 
-# punkty92$liczebnosc <- rep(0, length(punkty92))
-# siatka_nr <- aggregate(punkty92['liczebnosc'], by = siatka_n, FUN = length) 
-# sp::spplot(siatka_nr, 'liczebnosc')
-# 
-# library(raster)
-# r <- raster(xmn=0, ymn=0, xmx=10, ymx=10, res=1)
-# xy <- spsample(as(extent(r), 'SpatialPolygons'), 100, 'random')
-# 
-# x <- rasterize(punkty92, siatka_n, fun='count')
-# plot(x) 
-
-
 # # generating raster density map ----------------------------------------------------------------------------------------------
 # # test for one species
 # trees_7 %>%
@@ -294,20 +238,6 @@ draw_map(trees_7_gps, facet = TRUE)
 #   # tm_scale_bar(position = c("left", "bottom")) + 
 #   tm_style_white(title = "") 
 
-
-
-add_gps(trees_05)
-
-loop <- list(trees_05, trees_05_3)
-
-testing <- lapply(loop, add_gps)
-
-qtm(testing[[1]])
- 
-
-
-
-
 mapka <- 
   tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4)
@@ -320,12 +250,15 @@ mapka <-
 draw_maps2 <- function(x){  
 map1 <- mapka + qtm(subset(trees_05_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "<0.5m")
 map2 <- mapka + qtm(subset(trees_05_3_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">0.5m&<3cm")
-map3 <- mapka + qtm(subset(trees_3_7_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "3cm<dbh<7cm")
-map4 <- mapka + qtm(subset(trees_7_gps, g == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">7cm")  
-tmap_arrange(map1, map2, map3, map4, asp = NA) 
+# map3 <- mapka + qtm(subset(trees_3_7_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "3cm<dbh<7cm")
+# map4 <- mapka + qtm(subset(trees_7_gps, g == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">7cm")  
+tmap_arrange(map1, map2, asp = NA) 
 }
 
-draw_maps2("JD")
+draw_maps2("BK")
 
+buk <- trees_05 %>% filter(gat == "BK")
+czm.p <- trees_05 %>% filter(gat == "CZM.P")
 
+View(dplyr::inner_join(buk, czm.p, by = "nr_podpow"))
 
