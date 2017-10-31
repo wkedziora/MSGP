@@ -12,6 +12,32 @@ library(tmap)
 data(Europe, rivers) # loading data of Europe to plot it later as a background
 vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
 
+# function that filters species and add GPS position to a sample plot
+add_gps <- function(dataset, col_name = "gat") {
+  dataset %>% 
+    group_by_(col_name) %>% 
+    filter(n() > 100) %>%
+    ungroup() %>%
+    left_join(., gps_coord, by = "nr_punktu") -> y
+  coordinates(y) <- ~ lon + lat #adding sptial relationship
+  proj4string(y) <- "+init=epsg:4326" #adding WGS84 projection
+  return(y)
+}
+
+# function for fast map drawing
+draw_map <- function(dataframe, facet = FALSE) {
+  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+    qtm(dataframe, dots.alpha = 0.5) +
+    # tm_compass(position = c("left", "bottom")) +
+    # tm_scale_bar(position = c("left", "bottom")) + 
+    tm_style_white(title = "")
+  if (facet == TRUE) 
+    map + tm_facets("gat", free.coords=TRUE, drop.units=TRUE) 
+  else 
+    map
+}
+
 ###
 ### Czego potrzebuję?
 # 1. Wybieram Wszystkie punkty z drugiego cyklu w których sosna dominuje
@@ -108,34 +134,10 @@ trees_05$gat %>%
 #   filter(gat == "BRZ.O") %>%
 #   left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
 
-# data for species that are more abundant
-f <- . %>% 
-  group_by(gat) %>%
-  filter(n() > 100) %>%
-  ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu")
+trees_05_gps <- add_gps(trees_05)
 
-f(trees_05)
-
-trees_05 %>%
-  group_by(gat) %>%
-  filter(n() > 100) %>%
-  ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
-
-trees_05_gps <- making_gps(trees_05)
-
-coordinates(trees_05_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_05_gps) <- "+init=epsg:4326" #adding WGS84 projection
-
-
-tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_05_gps, dots.alpha = 0.5) +
-  # tm_compass(position = c("left", "bottom")) +
-  # tm_scale_bar(position = c("left", "bottom")) + 
-  tm_style_white(title = "") +
-  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
+draw_map(trees_05_gps)
+draw_map(trees_05_gps, facet = TRUE)
 
 # medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----------------------------------------------------
 
@@ -161,22 +163,10 @@ trees_05_3$gat %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
-trees_05_3 %>%
-  group_by(gat) %>%
-  filter(n() > 100) %>%
-  ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_05_3_gps
+trees_05_3_gps <- add_gps(trees_05_3)
 
-coordinates(trees_05_3_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_05_3_gps) <- "+init=epsg:4326" #adding WGS84 projection
-
-tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_05_3_gps, dots.alpha = 0.5) +
-  # tm_compass(position = c("left", "bottom")) +
-  # tm_scale_bar(position = c("left", "bottom")) + 
-  tm_style_white(title = "") +
-  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
+draw_map(trees_05_3_gps)
+draw_map(trees_05_3_gps, facet = TRUE)
 
 # high trees (3 cm < dbh < 7 cm) data loading and wrangling ---------------------------------------------------------
 trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
@@ -201,26 +191,10 @@ trees_3_7$gat %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
-trees_3_7 %>%
-  group_by(gat) %>%
-  filter(n() > 100) %>%
-  ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_3_7_gps
+trees_3_7_gps <- add_gps(trees_3_7)
 
-coordinates(trees_3_7_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_3_7_gps) <- "+init=epsg:4326" #adding WGS84 projection
-
-tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_3_7_gps, dots.alpha = 0.5) +
-  # tm_compass(position = c("left", "bottom")) +
-  # tm_scale_bar(position = c("left", "bottom")) + 
-  tm_style_white(title = "") +
-  tm_facets("gat", free.coords=TRUE, drop.units=TRUE)
-
-
-
-
+draw_map(trees_3_7_gps)
+draw_map(trees_3_7_gps, facet = TRUE)
 
 # highest trees (dbh > 7 cm) data loading and wrangling -------------------------------------------------------------
 trees_7_col <- c("gat", "war")
@@ -246,22 +220,10 @@ trees_7$gat %>%
   ggplot(., aes(f, n)) + 
   geom_bar(stat = "identity")
 
-trees_7 %>%
-  group_by(gat) %>%
-  filter(n() > 100) %>%
-  ungroup() %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_7_gps
+trees_7_gps <- add_gps(trees_7)
 
-coordinates(trees_7_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_7_gps) <- "+init=epsg:4326" #adding WGS84 projection
-
-tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(trees_7_gps, dots.alpha = 0.5) +
-  # tm_compass(position = c("left", "bottom")) +
-  # tm_scale_bar(position = c("left", "bottom")) + 
-  tm_style_white(title = "") +
-  tm_facets("gat", free.coords = TRUE, drop.units = TRUE)
+draw_map(trees_7_gps)
+draw_map(trees_7_gps, facet = TRUE)
 
 
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
@@ -332,17 +294,7 @@ tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
 #   # tm_scale_bar(position = c("left", "bottom")) + 
 #   tm_style_white(title = "") 
 
-# function that filters species and add GPS position to a sample plot
-add_gps <- function(dataset, col_name = "gat") {
-  dataset %>% 
-    group_by_(col_name) %>% 
-    filter(n() > 100) %>%
-    ungroup() %>%
-    left_join(., gps_coord, by = "nr_punktu") -> y
-  coordinates(y) <- ~ lon + lat #adding sptial relationship
-  proj4string(y) <- "+init=epsg:4326" #adding WGS84 projection
-  return(y)
-}
+
 
 add_gps(trees_05)
 
@@ -352,18 +304,7 @@ testing <- lapply(loop, add_gps)
 
 qtm(testing[[1]])
  
-draw_map <- function(facet = FALSE) {
-  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-    qtm(testing[[2]], dots.alpha = 0.5) +
-    # tm_compass(position = c("left", "bottom")) +
-    # tm_scale_bar(position = c("left", "bottom")) + 
-    tm_style_white(title = "")
-  if (facet == TRUE) 
-    map + tm_facets("gat", free.coords=TRUE, drop.units=TRUE) 
-  else 
-    map
-}
+
 
 
 
