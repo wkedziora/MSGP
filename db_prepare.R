@@ -6,11 +6,12 @@ library(tidyverse)
 library(forcats)
 library(stringr)
 library(sp)
-# library(ggmap)
+library(rgdal)
 library(tmap)
 # vignette("tmap-nutshell")
 data(Europe, rivers) # loading data of Europe to plot it later as a background
 vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
+Polska <- readOGR(dsn = "dane", layer = "Polska")
 
 # function that filters species and add GPS position to a sample plot
 add_gps <- function(dataset, col_name = "gat") {
@@ -26,7 +27,7 @@ add_gps <- function(dataset, col_name = "gat") {
 
 # function for fast map drawing
 draw_map <- function(dataframe, facet = FALSE) {
-  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() + # Polska or Europe for performance
     tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
     qtm(dataframe, dots.alpha = 0.5) +
     # tm_compass(position = c("left", "bottom")) +
@@ -239,23 +240,18 @@ draw_map(trees_7_gps, facet = TRUE)
 #   tm_style_white(title = "") 
 
 mapka <- 
-  tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4)
-  # tm_shape(subset(trees_05_gps, gat == "JD")) + tm_dots(alpha = 0.5)
-  # tm_layout(panel.show = TRUE, panel.labels = "aaa")
-  # tm_compass(position = c("left", "bottom")) 
-  # tm_scale_bar(position = c("left", "bottom")) + 
-
   
-draw_maps2 <- function(x){  
+draw_maps_4 <- function(x){  
 map1 <- mapka + qtm(subset(trees_05_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "<0.5m")
 map2 <- mapka + qtm(subset(trees_05_3_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">0.5m&<3cm")
-# map3 <- mapka + qtm(subset(trees_3_7_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "3cm<dbh<7cm")
-# map4 <- mapka + qtm(subset(trees_7_gps, g == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">7cm")  
-tmap_arrange(map1, map2, asp = NA) 
+map3 <- mapka + qtm(subset(trees_3_7_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = "3cm<dbh<7cm")
+map4 <- mapka + qtm(subset(trees_7_gps, gat == x), dots.alpha = 0.5) + tm_layout(panel.show = TRUE, panel.labels = ">7cm")
+tmap_arrange(map1, map2, map3, map4, asp = NA) 
 }
 
-draw_maps2("BK")
+draw_maps_4("BK")
 
 buk <- trees_05 %>% filter(gat == "BK")
 czm.p <- trees_05 %>% filter(gat == "CZM.P")
