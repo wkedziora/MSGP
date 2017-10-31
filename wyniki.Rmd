@@ -1,7 +1,7 @@
 ---
-title: "Przestrzenne zrĂłĹĽnicowanie drugiego piÄ™tra w drzewostanach sosnowych"
-author: "Wojciech KÄ™dziora"
-date: "22 paĹşdziernika 2017"
+title: "Przestrzenne zróżnicowanie drugiego piętra w drzewostanach sosnowych"
+author: "Wojciech Kędziora"
+date: "22-10-2017"
 output:
   word_document:
     reference_docx: word-styles-reference-01.docx
