@@ -243,20 +243,16 @@ draw_map(trees_7_gps, facet = TRUE)
 
 trees_all <- bind_rows("<0.5m" = trees_05, ">0.5m&<3cm" = trees_05_3, "3cm<dbh<7cm" =  trees_3_7, ">7cm" = trees_7, .id = "group")
 
-trees_all$gat <- factor(trees_all$gat)
-
 trees_all_gps <- add_gps(trees_all)
+trees_all_gps$gat <- factor(trees_all_gps$gat)
 
 draw_maps_4 <- function(x){ 
 tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(subset(trees_all_gps, gat == x), dots.alpha = 0.5) + tm_facets("group", free.coords = TRUE, drop.units = TRUE) 
+  qtm(subset(trees_all_gps, gat == x), dots.alpha = 0.5) + 
+    tm_facets(by = c("group", "gat"), free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE) 
 }
 
-draw_maps_4("CZM.P")
+draw_maps_4("BK")
 
-buk <- trees_05 %>% filter(gat == "BK")
-czm.p <- trees_05 %>% filter(gat == "CZM.P")
-
-View(dplyr::inner_join(buk, czm.p, by = "nr_podpow"))
-
+save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
