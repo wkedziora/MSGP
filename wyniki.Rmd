@@ -3,20 +3,60 @@ title: "Przestrzenne zróżnicowanie drugiego piętra w drzewostanach sosnowych"
 author: "Wojciech Kędziora"
 date: "22-10-2017"
 output:
-  word_document:
-    reference_docx: word-styles-reference-01.docx
   html_document:
     df_print: paged
+  word_document:
+    reference_docx: word-styles-reference-01.docx
 ---
 
 ```{r setup, include=FALSE}
 
-library(dplyr)
-library(ggplot2)
-library(tidyr)
 library(odbc)
 library(DBI)
+library(tidyverse)
+library(forcats)
+library(stringr)
+library(sp)
+library(rgdal)
+library(tmap)
+data(Europe, rivers) # loading data of Europe to plot it later as a background
+vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
+rm(rivers)
+Polska <- readOGR(dsn = "dane", layer = "Polska")
 
+# function that filters species and add GPS position to a sample plot
+add_gps <- function(dataset, col_name = "gat") {
+  dataset %>% 
+    group_by_(col_name) %>% 
+    filter(n() > 100) %>%
+    ungroup() %>%
+    left_join(., gps_coord, by = "nr_punktu") -> y
+  coordinates(y) <- ~ lon + lat #adding sptial relationship
+  proj4string(y) <- "+init=epsg:4326" #adding WGS84 projection
+  return(y)
+}
+
+# function for fast map drawing
+draw_map <- function(dataframe, facet = FALSE) {
+  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() + # Polska or Europe for performance
+    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+    qtm(dataframe, dots.alpha = 0.5) +
+    # tm_compass(position = c("left", "bottom")) +
+    # tm_scale_bar(position = c("left", "bottom")) + 
+    tm_style_white(title = "")
+  if (facet == TRUE) 
+    map + tm_facets("gat", free.coords = TRUE, drop.units = TRUE) 
+  else 
+    map
+}
+
+wykres <- . %>% 
+  factor() %>% 
+  fct_lump(n = 10) %>%
+  fct_infreq() %>%
+  fct_relevel("Other", after = Inf) %>%
+  fct_count() 
+  
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -38,14 +78,108 @@ Tabela `r dbListTables(con)[23]` przechowuje informacje o położeniu poszczegó
 
 ## Drzewa do 0,5 m wysokości
 
-You can also embed plots, for example:
+```{r preparation, cache = TRUE, warning = FALSE}
 
-```{r 05_loading, echo=FALSE}
-DRZEWA_DO_05 <- dbReadTable(con, "DRZEWA_DO_05")
-drop.cols <- c("NR_PUNKTU", "LP", "NR_CYKLU", "WAR", "USZK_RODZ2", "USZK_PROC2", "ID") 
-DRZEWA_DO_05 %>% filter(NR_CYKLU == "2" & WAR == "1") %>% select(-one_of(drop.cols)) -> D.05.filter 
-D.05.filter$GAT <- factor(D.05.filter$GAT)
-D.05.filter$POKR <- factor(D.05.filter$POKR)
-D.05.filter$USZK_RODZ1 <- factor(D.05.filter$USZK_RODZ1)
+# data loading -------------------------------------------------------------------------------------------------------
+trees_05_raw <- dbReadTable(con, "DRZEWA_DO_05") # trees shorter than 0.5 m
+trees_05_3_raw <- dbReadTable(con, "DRZEWA_05_DO_3") # trees teller than 0.5 m and smaller than 3 cm dbh
+trees_3_7_raw <- dbReadTable(con, "DRZEWA_3_DO_7") # trees between 3 and 7 cm dbh
+trees_7_raw <- dbReadTable(con, "DRZEWA_OD_7") # trees above 7 cm dbh
+gps_coord_raw <- dbReadTable(con, "PUNKTY_TRAKTU") # GPS coordinates
+
+# general data wrangling ---------------------------------------------------------------------------------------------
+
+# I need doubles for later use of Spatial Data 
+gps_coord_raw %>%
+  as_tibble(.) %>%
+  type_convert(.) %>%
+  dplyr::select(nr_punktu = NR_PUNKTU,
+         lon = DLUGOSC,
+         lat = SZEROKOSC) -> gps_coord
+
+# lowest trees (h < 0.5 m) data loading and wrangling ----------------------------------------------------------------
+trees_05_col <- c("gat", "pokr", "war", "uszk_rodz1", "uszk_proc1")
+trees_05_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  # filter(war == 1) %>% # we want both trees and bushes therefore no filter here
+  dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
+  mutate_at(trees_05_col, funs(factor(.))) %>%
+  mutate(gat = fct_collapse(gat, 
+                            DB = c("DB", "DB.S", "DB.B"),
+                            BRZ = c("BRZ", "BRZ.O"))) -> trees_05 # creating a new tibble
+trees_05_gps <- add_gps(trees_05)
+
+# medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----------------------------------------------------
+
+trees_05_3_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
+trees_05_3_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  # filter(war == 1) %>%
+  dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
+  mutate_at(trees_05_3_col, funs(factor(.))) %>%
+  mutate(gat = fct_collapse(gat, 
+                            DB = c("DB", "DB.S", "DB.B"),
+                            BRZ = c("BRZ", "BRZ.O"))) -> trees_05_3 # creating a new tibble
+trees_05_3_gps <- add_gps(trees_05_3)
+
+# high trees (3 cm < dbh < 7 cm) data loading and wrangling ---------------------------------------------------------
+trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
+trees_3_7_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  # filter(war == 1) %>%
+  dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
+  mutate_at(trees_3_7_col, funs(factor(.))) %>%
+  mutate(gat = fct_collapse(gat, 
+                            DB = c("DB", "DB.S", "DB.B"),
+                            BRZ = c("BRZ", "BRZ.O"))) -> trees_3_7 # creating a new tibble
+trees_3_7_gps <- add_gps(trees_3_7)
+
+# highest trees (dbh > 7 cm) data loading and wrangling -------------------------------------------------------------
+trees_7_col <- c("gat", "war")
+trees_7_raw %>% # raw data loading to pipe
+  as_tibble(.) %>% # changing format to tibble
+  filter(NR_CYKLU == 2) %>% # filtering out only second cycle
+  rename_all(tolower) %>%
+  filter(war == 2 | war == 3) %>%
+  dplyr::select(nr_punktu, nr_cyklu, nr_podpow, gat, wiek, war, azymut, odl, h, d13) %>%
+  mutate_at(trees_7_col, funs(factor(.))) %>%
+  type_convert(col_types = cols_only(nr_punktu = "i")) %>%
+  mutate(gat = fct_collapse(gat, 
+                            DB = c("DB", "DB.S", "DB.B"),
+                            BRZ = c("BRZ", "BRZ.O"))) -> trees_7 # creating a new tibble
+
+trees_7_gps <- add_gps(trees_7)
+
+trees_all <- bind_rows("< 0.5m" = trees_05, 
+                       "> 0.5m & < 3cm" = trees_05_3, 
+                       "3cm < dbh < 7cm" =  trees_3_7, 
+                       "dbh > 7cm" = trees_7, 
+                       .id = "group")
+
+trees_all_gps <- add_gps(trees_all)
+trees_all_gps$gat <- factor(trees_all_gps$gat)
+```
+
+```{r plotting}
+draw_maps_4 <- function(x){ 
+tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+  qtm(subset(trees_all_gps, gat == x), dots.alpha = 0.5) + 
+    tm_facets(by = "group", free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE)
+}
+
+# draw_maps_4("BK")
+
+gatunki <- as.list(sort(as.character(unique(trees_all_gps$gat))))
+# gatunki_sample <- as.list(gatunki[1:3])
+names(gatunki) <- gatunki
+
+lapply(gatunki, draw_maps_4)
 ```
 
