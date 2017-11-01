@@ -250,9 +250,11 @@ draw_maps_4 <- function(x){
 tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
   qtm(subset(trees_all_gps, gat == x), dots.alpha = 0.5) + 
-    tm_facets(by = c("group", "gat"), free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE) 
+    tm_facets(by = "group", free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE) +
+    tm_layout(asp = 0, outer.margins=0)
 }
 
 draw_maps_4("BK")
 
 save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
+
