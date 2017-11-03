@@ -8,21 +8,24 @@ library(stringr)
 library(sp)
 library(rgdal)
 library(tmap)
+library(tmaptools)
+library(sf)
 # vignette("tmap-nutshell")
 data(Europe, rivers) # loading data of Europe to plot it later as a background
 vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
-rm(rivers)
-Polska <- readOGR(dsn = "dane", layer = "Polska")
+rm(Europe, rivers)
+Polska <- read_shape("dane/Polska.shp", as.sf = TRUE)
 
 # function that filters species and add GPS position to a sample plot
 add_gps <- function(dataset, col_name = "gat") {
   dataset %>% 
-    group_by_(col_name) %>% 
-    filter(n() > 100) %>%
-    ungroup() %>%
+    # group_by_(col_name) %>% 
+    # filter(n() > 10) %>%
+    # ungroup() %>%
     left_join(., gps_coord, by = "nr_punktu") -> y
-  coordinates(y) <- ~ lon + lat #adding sptial relationship
-  proj4string(y) <- "+init=epsg:4326" #adding WGS84 projection
+  y <- st_as_sf(y, coords = c("lon", "lat"), crs = 4326)
+  # coordinates(y) <- ~ lon + lat #adding sptial relationship
+  # proj4string(y) <- "+init=epsg:4326" #adding WGS84 projection
   return(y)
 }
 
@@ -73,6 +76,7 @@ wykres <- . %>%
 testdb <- file.path("D:\\Praca\\Badania\\WISL\\WISL_10lat_SGGW") # determining database filepath
 con <- dbConnect(odbc::odbc(), dsn = "WISL", encoding = "Windows-1250")# connecting to db
 # dbListTables(con) # listing all tables available in th database
+ 
 
 # data loading -------------------------------------------------------------------------------------------------------
 trees_05_raw <- dbReadTable(con, "DRZEWA_DO_05") # trees shorter than 0.5 m
@@ -82,6 +86,7 @@ trees_7_raw <- dbReadTable(con, "DRZEWA_OD_7") # trees above 7 cm dbh
 plot_raw <- dbReadTable(con, "POW_A_B") # sample plot data
 gps_coord_raw <- dbReadTable(con, "PUNKTY_TRAKTU") # GPS coordinates
 sites_raw <- dbReadTable(con, "ADRES_POW") # site description
+dbDisconnect(con)
 
 # general data wrangling ---------------------------------------------------------------------------------------------
 
@@ -114,7 +119,7 @@ trees_05_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  # filter(war == 1) %>% # we want both trees and bushes therefore no filter here
+  filter(war == 1) %>% # we want only trees
   dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
   mutate_at(trees_05_col, funs(factor(.))) %>%
   mutate(gat = fct_collapse(gat, 
@@ -219,27 +224,34 @@ draw_map(trees_7_gps, facet = TRUE)
 
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
 # # generating raster density map ----------------------------------------------------------------------------------------------
-# # test for one species
-# trees_7 %>%
-#   filter(gat == "JD") %>%
-#   left_join(., gps_coord, by = "nr_punktu") -> trees_7_gps
-# 
-# coordinates(trees_7_gps) <- ~ lon + lat #adding sptial relationship
-# proj4string(trees_7_gps) <- "+init=epsg:4326" #adding WGS84 projection
-# 
-# 
-# library(MASS)
-# k = kde2d(trees_7_gps$lon, trees_7_gps$lat, h = 3, n = 1000)
-# r = raster(k)
-# plot(r)
-# 
-# tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-#   qtm(r) +
-#   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-#   qtm(trees_7_gps, dots.alpha = 0.5) +
-#   # tm_compass(position = c("left", "bottom")) +
-#   # tm_scale_bar(position = c("left", "bottom")) + 
-#   tm_style_white(title = "") 
+# test for one species
+trees_05 %>%
+  filter(gat == "DB") %>%
+  left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
+
+coordinates(trees_05_gps) <- ~ lon + lat #adding sptial relationship
+proj4string(trees_05_gps) <- "+init=epsg:4326" #adding WGS84 projection
+
+test <- function(x) {
+library(MASS)
+library(raster)
+limits_x <- c(11.37624, 28.5488)
+limits_y <- c(47.46568, 56.4426)
+k = kde2d(x$lon, x$lat, h = 3, n = 100, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
+r = raster(k)
+return(r)
+}
+
+r <- test(trees_05_gps)
+
+tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+  qtm(r) +
+  tm_shape(Polska, projection="longlat") + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+  qtm(trees_05_gps, dots.alpha = 0.5) +
+  # tm_compass(position = c("left", "bottom")) +
+  # tm_scale_bar(position = c("left", "bottom")) +
+  tm_style_white(title = "")
 
 trees_all <- bind_rows("<0.5m" = trees_05, ">0.5m&<3cm" = trees_05_3, "3cm<dbh<7cm" =  trees_3_7, ">7cm" = trees_7, .id = "group")
 
@@ -258,3 +270,41 @@ draw_maps_4("BK")
 
 save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
 
+sites_so <- dplyr::inner_join(sites, trees_05, by = "nr_podpow") %>% rename(nr_punktu = nr_punktu.x)
+sites_so_gps <- add_gps(sites_so)
+
+draw_map(sites_so_gps)
+draw_map(sites_so_gps, facet = TRUE)
+
+# Poland as 10km squares
+poland <- read_shape("POL_adm_shp/POL_adm0.shp", as.sf = TRUE)
+poland_grid <- read_shape("Poland_shapefile/pl_10km.shp", as.sf = TRUE)
+
+poland <- set_projection(poland, 4326)
+poland_grid <- set_projection(poland_grid, 4326)
+
+poland_grid %>% st_join(poland) %>% 
+  dplyr::filter(!is.na(ID_0)) %>% dplyr::select(CELLCODE) ->
+  poland_grid
+
+poland_grid %>% st_join(st_as_sf(set_projection(trees_05_gps %>% dplyr::select(gat == "GB"), 2180))) %>% 
+  dplyr::group_by(CELLCODE) %>% dplyr::summarise(N = n(), mSI = mean(pokr)) -> 
+  poland_agg
+
+# tmap_mode('view')
+tm_shape(poland_agg) + tm_fill(col = "N", alpha = 0.5)
+
+###
+# - po pierwsze, pokazać dane na siatce 10x10km
+# - do drugie, ilość alpha wielkość udziału kolor
+# - po trzecie, ogarnąć zasiegi gatunków
+# - po czwarte, 
+
+
+nc2 <- st_centroid(st_geometry(nc))
+
+
+x = st_sf(a = 1:3, geom = st_sfc(st_point(c(1,1)), st_point(c(2,2)), st_point(c(3,3))))
+
+geom = st_sfc(st_point(c(0,1)), st_point(c(11,12)))
+s = st_sf(a = 15:16, geometry = geom)
