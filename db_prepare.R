@@ -5,7 +5,7 @@ library(DBI)
 library(tidyverse)
 library(forcats)
 library(stringr)
-library(sp)
+# library(sp)
 library(rgdal)
 library(tmap)
 library(tmaptools)
@@ -51,6 +51,17 @@ wykres <- . %>%
   fct_count() 
   # ggplot(., aes(f, n)) +
   # geom_bar(stat = "identity")
+
+density <- function(x) {
+  library(MASS)
+  library(raster)
+  limits_x <- c(11.37624, 28.5488)
+  limits_y <- c(47.46568, 56.4426)
+  coords <- as.data.frame(st_coordinates(x$geometry))
+  density_x <- kde2d(coords$X, coords$Y, n = 30, h = 1, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
+  r = raster(density_x)
+  return(r)
+}
 
 ###
 ### Czego potrzebuję?
@@ -229,20 +240,9 @@ trees_05 %>%
   filter(gat == "DB") %>%
   left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
 
-coordinates(trees_05_gps) <- ~ lon + lat #adding sptial relationship
-proj4string(trees_05_gps) <- "+init=epsg:4326" #adding WGS84 projection
+trees_05_gps <- add_gps(trees_05_gps)
 
-test <- function(x) {
-library(MASS)
-library(raster)
-limits_x <- c(11.37624, 28.5488)
-limits_y <- c(47.46568, 56.4426)
-k = kde2d(x$lon, x$lat, h = 3, n = 100, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
-r = raster(k)
-return(r)
-}
-
-r <- test(trees_05_gps)
+r <- density(trees_05_gps)
 
 tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   qtm(r) +
@@ -299,12 +299,3 @@ tm_shape(poland_agg) + tm_fill(col = "N", alpha = 0.5)
 # - do drugie, ilość alpha wielkość udziału kolor
 # - po trzecie, ogarnąć zasiegi gatunków
 # - po czwarte, 
-
-
-nc2 <- st_centroid(st_geometry(nc))
-
-
-x = st_sf(a = 1:3, geom = st_sfc(st_point(c(1,1)), st_point(c(2,2)), st_point(c(3,3))))
-
-geom = st_sfc(st_point(c(0,1)), st_point(c(11,12)))
-s = st_sf(a = 15:16, geometry = geom)
