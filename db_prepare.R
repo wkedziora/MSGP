@@ -2,19 +2,23 @@
 
 library(odbc)
 library(DBI)
-library(tidyverse)
+library(MASS)
+library(raster)
 library(forcats)
 library(stringr)
-# library(sp)
 library(rgdal)
 library(tmap)
 library(tmaptools)
 library(sf)
+library(tidyverse) # should be loaded as last to make sure that its function work without any additional commands
 # vignette("tmap-nutshell")
+
 data(Europe, rivers) # loading data of Europe to plot it later as a background
 vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
-rm(Europe, rivers)
-Polska <- read_shape("dane/Polska.shp", as.sf = TRUE)
+rm(rivers)
+# Polska <- read_shape("dane/Polska.shp", as.sf = TRUE)
+# Poland administrative boundary
+poland <- read_shape("POL_adm_shp/POL_adm0.shp", as.sf = TRUE)
 
 # function that filters species and add GPS position to a sample plot
 add_gps <- function(dataset, col_name = "gat") {
@@ -33,12 +37,23 @@ add_gps <- function(dataset, col_name = "gat") {
 draw_map <- function(dataframe, facet = FALSE) {
   map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() + # Polska or Europe for performance
     tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-    qtm(dataframe, dots.alpha = 0.5) +
+    qtm(dataframe, dots.alpha = 0.5) 
     # tm_compass(position = c("left", "bottom")) +
     # tm_scale_bar(position = c("left", "bottom")) + 
-    tm_style_white(title = "")
+    # tm_style_white(title = "")
   if (facet == TRUE) 
     map + tm_facets("gat", free.coords = TRUE, drop.units = TRUE) 
+  else 
+    map
+}
+
+draw_maps_4 <- function(dataframe, x, facet = FALSE){ 
+  map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
+    qtm(subset(dataframe, gat == x), dots.alpha = 0.5) + 
+    tm_layout(asp = 0, outer.margins=0)
+  if (facet == TRUE) 
+    map + tm_facets(by = "group", free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE)
   else 
     map
 }
@@ -53,8 +68,6 @@ wykres <- . %>%
   # geom_bar(stat = "identity")
 
 density <- function(x) {
-  library(MASS)
-  library(raster)
   limits_x <- c(11.37624, 28.5488)
   limits_y <- c(47.46568, 56.4426)
   coords <- as.data.frame(st_coordinates(x$geometry))
@@ -168,7 +181,7 @@ trees_05_3_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  # filter(war == 1) %>%
+  filter(war == 1) %>%
   dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
   mutate_at(trees_05_3_col, funs(factor(.))) %>%
   mutate(gat = fct_collapse(gat, 
@@ -191,7 +204,7 @@ trees_3_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
-  # filter(war == 1) %>%
+  filter(war == 1) %>%
   dplyr::select(-c(nr_cyklu, lp, id, uszk_rodz2, uszk_proc2)) %>%
   mutate_at(trees_3_7_col, funs(factor(.))) %>%
   mutate(gat = fct_collapse(gat, 
@@ -215,12 +228,15 @@ trees_7_raw %>% # raw data loading to pipe
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
   filter(war == 2 | war == 3) %>%
+  filter(odl >= 56 & odl <= 259) %>% # using the same dimensions as for other layers of sample plot
   dplyr::select(nr_punktu, nr_cyklu, nr_podpow, gat, wiek, war, azymut, odl, h, d13) %>%
   mutate_at(trees_7_col, funs(factor(.))) %>%
   type_convert(col_types = cols_only(nr_punktu = "i")) %>%
   mutate(gat = fct_collapse(gat, 
                             DB = c("DB", "DB.S", "DB.B"),
-                            BRZ = c("BRZ", "BRZ.O"))) -> trees_7 # creating a new tibble
+                            BRZ = c("BRZ", "BRZ.O"))) %>%
+  filter(gat %in% c("AK", "BK", "BRZ", "CZR", "DB", "DB.C", "DG", "GB", "IWA", "JB", "JD", "JKL", "JRZ", "JS", 
+                    "JW", "KL", "KL.P", "LP", "MD", "OL", "OL.S", "OS", "SO", "ŚW", "WB", "WZ", "WZ.P")) -> trees_7 # creating a new tibble
 summary(trees_7)
 
 wykres(trees_7$gat) %>%
@@ -236,13 +252,9 @@ draw_map(trees_7_gps, facet = TRUE)
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
 # # generating raster density map ----------------------------------------------------------------------------------------------
 # test for one species
-trees_05 %>%
-  filter(gat == "DB") %>%
-  left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
+trees_05_gps %>% filter(gat == "DB") -> test
 
-trees_05_gps <- add_gps(trees_05_gps)
-
-r <- density(trees_05_gps)
+r <- density(test)
 
 tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   qtm(r) +
@@ -253,28 +265,34 @@ tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_b
   # tm_scale_bar(position = c("left", "bottom")) +
   tm_style_white(title = "")
 
-trees_all <- bind_rows("<0.5m" = trees_05, ">0.5m&<3cm" = trees_05_3, "3cm<dbh<7cm" =  trees_3_7, ">7cm" = trees_7, .id = "group")
+# grouping altogether all sample plot layers ------------------------------------------------------------------------
+bind_rows("< 0.5m" = trees_05, 
+          "> 0.5m & < 3cm" = trees_05_3, 
+          "3cm < dbh < 7cm" =  trees_3_7, 
+          "dbh > 7cm" = trees_7, 
+          .id = "group") %>% 
+  group_by(gat) %>% 
+  filter(n() > 99) %>% 
+  ungroup() -> trees_all
 
-trees_all_gps <- add_gps(trees_all)
-trees_all_gps$gat <- factor(trees_all_gps$gat)
+# I need to add age restriction to avoid young pine monocultures
+sites %>% select(nr_punktu, nr_podpow, gat_pan_pr, wiek_pan_pr) %>% left_join(trees_all %>% select(-nr_punktu), by = "nr_podpow") -> sites_so
 
-draw_maps_4 <- function(x){ 
-tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-  qtm(subset(trees_all_gps, gat == x), dots.alpha = 0.5) + 
-    tm_facets(by = "group", free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE) +
-    tm_layout(asp = 0, outer.margins=0)
-}
-
-draw_maps_4("BK")
-
-save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
-
-sites_so <- dplyr::inner_join(sites, trees_05, by = "nr_podpow") %>% rename(nr_punktu = nr_punktu.x)
 sites_so_gps <- add_gps(sites_so)
+sites_so_gps$gat <- factor(sites_so_gps$gat)
 
-draw_map(sites_so_gps)
-draw_map(sites_so_gps, facet = TRUE)
+table(cut(sites_so$wiek_pan_pr, breaks = c(0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240)), sites_so$group)
+
+
+# draw_maps_4(sites_so_gps, "BK", facet = TRUE)
+# 
+# gatunki <- as.list(sort(as.character(unique(sites_so_gps$gat))))
+# gatunki_sample <- (gatunki[1:3])
+# names(gatunki_sample) <- gatunki_sample
+
+lapply(gatunki_sample, draw_maps_4, dataframe = sites_so_gps, facet = TRUE)
+
+# save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
 
 # Poland as 10km squares
 poland <- read_shape("POL_adm_shp/POL_adm0.shp", as.sf = TRUE)
