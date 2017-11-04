@@ -7,6 +7,7 @@ library(raster)
 library(forcats)
 library(stringr)
 library(rgdal)
+library(ggtern)
 library(tmap)
 library(tmaptools)
 library(sf)
@@ -47,16 +48,42 @@ draw_map <- function(dataframe, facet = FALSE) {
     map
 }
 
-draw_maps_4 <- function(dataframe, x, facet = FALSE){ 
+draw_maps_4 <- function(dataframe, x, facet = FALSE){
+  dataframe %>% filter(gat == x) -> subset
   map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
-    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
-    qtm(subset(dataframe, gat == x), dots.alpha = 0.5) + 
+    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 3) +
+    qtm(subset, dots.alpha = 0.5) + 
     tm_layout(asp = 0, outer.margins=0)
   if (facet == TRUE) 
     map + tm_facets(by = "group", free.coords = TRUE, drop.units = TRUE, drop.empty.facets = FALSE)
   else 
     map
 }
+
+# draw_maps_4(sites_so_gps, "DB", facet = TRUE)
+
+draw_density_plot <- function(dataframe, x) {
+  dataframe %>% filter(gat == x) -> subset
+r <- density(subset)
+rr <- mask(r, as(poland, "Spatial"))
+map <- tm_shape(rr) + tm_raster("layer", breaks = seq(0, 0.1, by=0.02),  legend.show = TRUE) +
+  tm_shape(poland) + tm_borders() +
+  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 3) +
+  tm_shape(subset) + tm_dots(alpha = 0.1) +
+  tm_layout(asp = 0, outer.margins=0)
+map
+}
+
+draw_density_plot_4 <- function(x) {
+map1 <- draw_density_plot(trees_05_gps, x)
+map2 <- draw_density_plot(trees_05_3_gps, x)
+map3 <- draw_density_plot(trees_3_7_gps, x)
+map4 <- draw_density_plot(trees_7_gps, x)
+tmap_arrange(map1, map2, map3, map4, ncol = 2, nrow = 2)
+}
+
+draw_density_plot_4("DB")
+# draw_density_plot(sites_so_gps, "JD")
 
 wykres <- . %>% 
   factor() %>% 
@@ -68,13 +95,24 @@ wykres <- . %>%
   # geom_bar(stat = "identity")
 
 density <- function(x) {
-  limits_x <- c(11.37624, 28.5488)
-  limits_y <- c(47.46568, 56.4426)
+  limits_x <- c(13, 25)
+  limits_y <- c(48, 56)
   coords <- as.data.frame(st_coordinates(x$geometry))
-  density_x <- kde2d(coords$X, coords$Y, n = 30, h = 1, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
+  density_x <- kde2d(coords$X, coords$Y, n = 100, h = 1, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
   r = raster(density_x)
   return(r)
 }
+
+test123 <- bind_cols(as.tibble(st_coordinates(trees_05_gps$geometry)), as.tibble(as.integer(trees_05_gps$pokr)))
+limits_x <- c(11.37624, 28.5488)
+limits_y <- c(47.46568, 56.4426)
+# coords <- as.data.frame(st_coordinates(x$geometry))
+density_x <- kde2d(test123$X, test123$Y, n = 30, h = 1, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
+density_x <- kde2d.weighted(test123$X, test123$Y, n = 30, h = 1, lims = c(limits_x, limits_y)) # n - number of gridcells for fast calclations
+r = raster(density_x)
+# return(r)
+rasterToPolygons 
+qtm(r)
 
 ###
 ### Czego potrzebuję?
@@ -149,7 +187,7 @@ trees_05_raw %>% # raw data loading to pipe
   mutate(gat = fct_collapse(gat, 
                             DB = c("DB", "DB.S", "DB.B"),
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_05 # creating a new tibble
-summary(trees_05)
+# summary(trees_05)
 
 trees_05$pokr <- factor(trees_05$pokr, ordered = TRUE, levels = c("+", "1", "5", "10", "15", "20", "25", "30", "35", "40", "45",
                                                                 "50", "55", "60", "65", "70", "75", "80", "85", "90", 
@@ -160,9 +198,9 @@ trees_05$pokr <- factor(trees_05$pokr, ordered = TRUE, levels = c("+", "1", "5",
 # checking if there is any sample plot with dubbled species
 # trees_05 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
 
-wykres(trees_05$gat) %>%
-  ggplot(., aes(f, n)) + 
-  geom_bar(stat = "identity")
+# wykres(trees_05$gat) %>%
+#   ggplot(., aes(f, n)) + 
+#   geom_bar(stat = "identity")
 
 # # test for one species
 # trees_05 %>%
@@ -171,8 +209,8 @@ wykres(trees_05$gat) %>%
 
 trees_05_gps <- add_gps(trees_05)
 
-draw_map(trees_05_gps)
-draw_map(trees_05_gps, facet = TRUE)
+# draw_map(trees_05_gps)
+# draw_map(trees_05_gps, facet = TRUE)
 
 # medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----------------------------------------------------
 
@@ -187,16 +225,16 @@ trees_05_3_raw %>% # raw data loading to pipe
   mutate(gat = fct_collapse(gat, 
                             DB = c("DB", "DB.S", "DB.B"),
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_05_3 # creating a new tibble
-summary(trees_05_3)
-
-wykres(trees_05_3$gat) %>%
-  ggplot(., aes(f, n)) + 
-  geom_bar(stat = "identity")
+# summary(trees_05_3)
+# 
+# wykres(trees_05_3$gat) %>%
+#   ggplot(., aes(f, n)) + 
+#   geom_bar(stat = "identity")
 
 trees_05_3_gps <- add_gps(trees_05_3)
 
-draw_map(trees_05_3_gps)
-draw_map(trees_05_3_gps, facet = TRUE)
+# draw_map(trees_05_3_gps)
+# draw_map(trees_05_3_gps, facet = TRUE)
 
 # high trees (3 cm < dbh < 7 cm) data loading and wrangling ---------------------------------------------------------
 trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
@@ -210,16 +248,16 @@ trees_3_7_raw %>% # raw data loading to pipe
   mutate(gat = fct_collapse(gat, 
                             DB = c("DB", "DB.S", "DB.B"),
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_3_7 # creating a new tibble
-summary(trees_3_7)
+# summary(trees_3_7)
 
-wykres(trees_3_7$gat) %>%
-  ggplot(., aes(f, n)) + 
-  geom_bar(stat = "identity")
+# wykres(trees_3_7$gat) %>%
+#   ggplot(., aes(f, n)) + 
+#   geom_bar(stat = "identity")
 
 trees_3_7_gps <- add_gps(trees_3_7)
 
-draw_map(trees_3_7_gps)
-draw_map(trees_3_7_gps, facet = TRUE)
+# draw_map(trees_3_7_gps)
+# draw_map(trees_3_7_gps, facet = TRUE)
 
 # highest trees (dbh > 7 cm) data loading and wrangling -------------------------------------------------------------
 trees_7_col <- c("gat", "war")
@@ -237,16 +275,16 @@ trees_7_raw %>% # raw data loading to pipe
                             BRZ = c("BRZ", "BRZ.O"))) %>%
   filter(gat %in% c("AK", "BK", "BRZ", "CZR", "DB", "DB.C", "DG", "GB", "IWA", "JB", "JD", "JKL", "JRZ", "JS", 
                     "JW", "KL", "KL.P", "LP", "MD", "OL", "OL.S", "OS", "SO", "ŚW", "WB", "WZ", "WZ.P")) -> trees_7 # creating a new tibble
-summary(trees_7)
-
-wykres(trees_7$gat) %>%
-  ggplot(., aes(f, n)) + 
-  geom_bar(stat = "identity")
+# summary(trees_7)
+# 
+# wykres(trees_7$gat) %>%
+#   ggplot(., aes(f, n)) + 
+#   geom_bar(stat = "identity")
 
 trees_7_gps <- add_gps(trees_7)
 
-draw_map(trees_7_gps)
-draw_map(trees_7_gps, facet = TRUE)
+# draw_map(trees_7_gps)
+# draw_map(trees_7_gps, facet = TRUE)
 
 
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
@@ -254,11 +292,27 @@ draw_map(trees_7_gps, facet = TRUE)
 # test for one species
 trees_05_gps %>% filter(gat == "DB") -> test
 
-r <- density(test)
+coords <- as.data.frame(st_coordinates(test$geometry))
+kde <- kde2d(coords$X, coords$Y, n = 100, h = 1)
+ks_kde <- ks::kde(coords, h = 1, gridsize = 100)
+r <- raster(kde)
+# r <- density(test)
+qtm(r)
+p <- st_as_sf(rasterToPolygons(r))
+qtm(p, fill = "layer")
 
-tm_shape(Polska, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
+plot(r)
+plot(poland, add = TRUE)
+
+# now use the mask function
+rr <- mask(r, as(poland, "Spatial"))
+
+plot(rr);plot(poland, add = TRUE)
+
+qtm(rr) + tm_shape(poland) + tm_borders() + tm_shape(test)
+
+tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
   qtm(r) +
-  tm_shape(Polska, projection="longlat") + tm_borders() +
   tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 4) +
   qtm(trees_05_gps, dots.alpha = 0.5) +
   # tm_compass(position = c("left", "bottom")) +
@@ -280,11 +334,14 @@ sites %>% select(nr_punktu, nr_podpow, gat_pan_pr, wiek_pan_pr) %>% left_join(tr
 
 sites_so_gps <- add_gps(sites_so)
 sites_so_gps$gat <- factor(sites_so_gps$gat)
+sites_so_gps$group <- factor(sites_so_gps$group)
 
 table(cut(sites_so$wiek_pan_pr, breaks = c(0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240)), sites_so$group)
 
 
-# draw_maps_4(sites_so_gps, "BK", facet = TRUE)
+draw_maps_4(sites_so_gps, "BK")
+
+
 # 
 # gatunki <- as.list(sort(as.character(unique(sites_so_gps$gat))))
 # gatunki_sample <- (gatunki[1:3])
@@ -294,6 +351,7 @@ lapply(gatunki_sample, draw_maps_4, dataframe = sites_so_gps, facet = TRUE)
 
 # save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
 
+# GRID drawing ------------------------------------------------------------------------------------------------------------
 # Poland as 10km squares
 poland <- read_shape("POL_adm_shp/POL_adm0.shp", as.sf = TRUE)
 poland_grid <- read_shape("Poland_shapefile/pl_10km.shp", as.sf = TRUE)
@@ -305,8 +363,8 @@ poland_grid %>% st_join(poland) %>%
   dplyr::filter(!is.na(ID_0)) %>% dplyr::select(CELLCODE) ->
   poland_grid
 
-poland_grid %>% st_join(st_as_sf(set_projection(trees_05_gps %>% dplyr::select(gat == "GB"), 2180))) %>% 
-  dplyr::group_by(CELLCODE) %>% dplyr::summarise(N = n(), mSI = mean(pokr)) -> 
+poland_grid %>% st_join(st_as_sf(set_projection(test, 4326))) %>% 
+  dplyr::group_by(CELLCODE) %>% dplyr::summarise(N = n(), mSI = mean(as.integer(pokr))) -> 
   poland_agg
 
 # tmap_mode('view')
