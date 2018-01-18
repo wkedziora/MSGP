@@ -46,7 +46,7 @@ sites_raw %>%
   dplyr::select(-nr_cyklu) %>%
   type_convert(., col_types = cols_only(gat_pan_pr = col_factor(levels = NULL))) -> sites # converting column to factor
 
-# lowest trees (h < 0.5 m) data loading and wrangling ----------------------------------------------------------------
+# lowest trees (h < 0.5 m) data wrangling ---------------------------------------------------------------------------
 trees_05_col <- c("gat", "pokr", "war", "uszk_rodz1", "uszk_proc1")
 trees_05_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -63,6 +63,7 @@ trees_05$pokr <- factor(trees_05$pokr, ordered = TRUE, levels = c("+", "1", "5",
                                                                   "50", "55", "60", "65", "70", "75", "80", "85", "90", 
                                                                   "95", "100"))
 
+# medium trees (h > 0.5 m & d < 3 cm) data wrangling -----------------------------------------------------------------
 trees_05_3_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_05_3_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -75,6 +76,7 @@ trees_05_3_raw %>% # raw data loading to pipe
                             DB = c("DB", "DB.S", "DB.B"),
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_05_3 # creating a new tibble
 
+# high trees (d > 3 cm & d < 7 cm) data wrangling -----------------------------------------------------------------
 trees_3_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_3_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
@@ -87,6 +89,7 @@ trees_3_7_raw %>% # raw data loading to pipe
                             DB = c("DB", "DB.S", "DB.B"),
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_3_7 # creating a new tibble
 
+# higher trees (d > 7 cm, not in canopy level) data wrangling -----------------------------------------------------------------
 trees_7_col <- c("gat", "war")
 trees_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
