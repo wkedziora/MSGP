@@ -90,14 +90,15 @@ trees_3_7_raw %>% # raw data loading to pipe
                             BRZ = c("BRZ", "BRZ.O"))) -> trees_3_7 # creating a new tibble
 
 # higher trees (d > 7 cm, not in canopy level) data wrangling -----------------------------------------------------------------
-trees_7_col <- c("gat", "war")
+trees_7_col <- c("gat", "war", "uszk_rodz1", "uszk_proc1")
 trees_7_raw %>% # raw data loading to pipe
   as_tibble(.) %>% # changing format to tibble
   filter(NR_CYKLU == 2) %>% # filtering out only second cycle
   rename_all(tolower) %>%
   filter(war == 2 | war == 3) %>%
   filter(odl >= 56 & odl <= 259) %>% # using the same dimensions as for other layers of sample plot
-  dplyr::select(nr_punktu, nr_cyklu, nr_podpow, gat, wiek, war, azymut, odl, h, d13) %>%
+  dplyr::select(nr_punktu, nr_podpow, gat, war, uszk_rodz1, nasil1) %>%
+  rename(uszk_proc1 = nasil1) %>%
   mutate_at(trees_7_col, funs(factor(.))) %>%
   type_convert(col_types = cols_only(nr_punktu = "i")) %>%
   mutate(gat = fct_collapse(gat, 
