@@ -6,19 +6,18 @@ library(forcats)
 library(stringr)
 library(rgdal)
 library(ggtern)
-library(tmap)
+library(tmap) # vignette("tmap-nutshell")
 library(tmaptools)
 library(sf)
 library(ks)
 library(feather)
 library(tidyverse) # should be loaded as last to make sure that its function work without any additional commands
-# vignette("tmap-nutshell")
 
 data(Europe, rivers) # loading data of Europe to plot it later as a background
 vistula <- subset(rivers, name == "Vistula") # Vistula river to plot is as a reference
 rm(rivers)
-# Polska <- read_shape("dane/Polska.shp", as.sf = TRUE)
 # Poland administrative boundary
+# Polska <- read_shape("dane/Polska.shp", as.sf = TRUE)
 poland <- read_shape("POL_adm_shp/POL_adm0.shp", as.sf = TRUE)
 
 # function that filters species and add GPS position to a sample plot
@@ -47,7 +46,6 @@ draw_map <- function(dataframe, facet = FALSE) {
   else 
     map
 }
-
 draw_maps_4 <- function(dataframe, x, facet = FALSE){
   dataframe %>% filter(gat == x) -> subset
   map <- tm_shape(Europe, bbox = "Poland", projection="longlat", is.master = TRUE) + tm_borders() +
@@ -61,7 +59,6 @@ draw_maps_4 <- function(dataframe, x, facet = FALSE){
 }
 
 # draw_maps_4(sites_so_gps, "DB", facet = TRUE)
-
 density <- function(x) {
   min_x <- c(13.8)
   max_x <- c(24.5)
@@ -77,38 +74,26 @@ density <- function(x) {
 }
 
 # density(trees_05_gps)
-
-# test_function <- function(x, waga) {
-#   st_geometry(x) <- NULL
-#   wwaga <- as.integer(x[[waga]])
-#   return(wwaga)
-# }
-# 
-# test_function(trees_05_gps, w = "pokr")
-
-
 draw_density_plot <- function(dataframe, x) {
   dataframe %>% filter(gat == x) -> subset
-r <- density(subset)
-rr <- mask(r, as(poland, "Spatial"))
-map <- tm_shape(rr) + tm_raster("layer", breaks = seq(0, 0.1, by=0.02),  legend.show = TRUE) +
-  tm_shape(poland) + tm_borders() +
-  tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 3) +
-  tm_shape(subset) + tm_dots(alpha = 0.1) +
-  tm_layout(asp = 0, outer.margins=0, legend.position = c("LEFT", "BOTTOM"))
-map
+  r <- density(subset)
+  rr <- mask(r, as(poland, "Spatial"))
+  map <- tm_shape(rr) + tm_raster("layer", breaks = seq(0, 0.1, by=0.02),  legend.show = TRUE) +
+    tm_shape(poland) + tm_borders() +
+    tm_shape(vistula) + tm_lines(col = "steelblue", lwd = 3) +
+    tm_shape(subset) + tm_dots(alpha = 0.1) + 
+    tm_layout(legend.position = c("LEFT", "BOTTOM"))
+  return(map)
 }
+# draw_density_plot(sites_so_gps, "BK")
 
-draw_density_plot(sites_so_gps, "BK")
-
-# draw_density_plot_4 <- function(x) {
-# map1 <- draw_density_plot(trees_05_gps, x)
-# map2 <- draw_density_plot(trees_05_3_gps, x)
-# map3 <- draw_density_plot(trees_3_7_gps, x)
-# map4 <- draw_density_plot(trees_7_gps, x)
-# tmap_arrange(map1, map2, map3, map4, ncol = 2, nrow = 2)
-# }
-
+draw_density_plot_4 <- function(x) {
+  map1 <- draw_density_plot(trees_05_gps, x)
+  map2 <- draw_density_plot(trees_05_3_gps, x)
+  map3 <- draw_density_plot(trees_3_7_gps, x)
+  map4 <- draw_density_plot(trees_7_gps, x)
+  tmap_arrange(map1, map2, map3, map4, ncol = 2, nrow = 2)
+}
 # draw_density_plot_4("DB")
 
 wykres <- . %>% 
@@ -150,62 +135,11 @@ plot <- read_feather("plot.feather") # sample plot data
 gps_coord <- read_feather("gps_coord.feather") # GPS coordinates
 sites <- read_feather("sites.feather") # site description
 
-# lowest trees (h < 0.5 m) data loading and wrangling ----------------------------------------------------------------
-# summary(trees_05)
-
-# checking if there is any sample plot with dubled species
-# trees_05 %>% group_by(nr_podpow, gat) %>% summarise(n = n_distinct(gat)) %>% arrange(desc(n))
-
-# wykres(trees_05$gat) %>%
-#   ggplot(., aes(f, n)) + 
-#   geom_bar(stat = "identity")
-
-# # test for one species
-# trees_05 %>%
-#   filter(gat == "BRZ.O") %>%
-#   left_join(., gps_coord, by = "nr_punktu") -> trees_05_gps
-
+# adding gps data ----------------------------------------------------------------------------------------------------
 trees_05_gps <- add_gps(trees_05)
-
-# draw_map(trees_05_gps)
-# draw_map(trees_05_gps, facet = TRUE)
-
-# medium trees (h > 0.5 m & dbh < 3 cm) data loading and wrangling -----------------------------------------------------
-# summary(trees_05_3)
-# 
-# wykres(trees_05_3$gat) %>%
-#   ggplot(., aes(f, n)) + 
-#   geom_bar(stat = "identity")
-
 trees_05_3_gps <- add_gps(trees_05_3)
-
-# draw_map(trees_05_3_gps)
-# draw_map(trees_05_3_gps, facet = TRUE)
-
-# high trees (3 cm < dbh < 7 cm) data loading and wrangling ---------------------------------------------------------
-# summary(trees_3_7)
-
-# wykres(trees_3_7$gat) %>%
-#   ggplot(., aes(f, n)) + 
-#   geom_bar(stat = "identity")
-
 trees_3_7_gps <- add_gps(trees_3_7)
-
-# draw_map(trees_3_7_gps)
-# draw_map(trees_3_7_gps, facet = TRUE)
-
-# highest trees (dbh > 7 cm) data loading and wrangling -------------------------------------------------------------
-# summary(trees_7)
-# 
-# wykres(trees_7$gat) %>%
-#   ggplot(., aes(f, n)) + 
-#   geom_bar(stat = "identity")
-
 trees_7_gps <- add_gps(trees_7)
-
-# draw_map(trees_7_gps)
-# draw_map(trees_7_gps, facet = TRUE)
-
 
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
 # # generating raster density map ----------------------------------------------------------------------------------------------
@@ -232,19 +166,28 @@ sites_so_gps$group <- factor(sites_so_gps$group)
 
 table(cut(sites_so$wiek_pan_pr, breaks = c(0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240)), sites_so$group)
 
-draw_maps_4(sites_so_gps, "BK", facet = TRUE)
-
-# 
-# gatunki <- as.list(sort(as.character(unique(sites_so_gps$gat))))
-# gatunki_sample <- (gatunki[1:3])
-gatunki_sample <- c("DB", "BK", "JD", "ŚW", "GB")
+### Species: Fagus sylvatica ------------------------------------------------------------------------------------------
+gatunki <- c("BK", "JD", "ŚW", "GB")
 names(gatunki) <- gatunki
 
-lapply(gatunki_sample, draw_maps_4, dataframe = sites_so_gps, facet = TRUE)
+buk <- read_shape("ranges/Fagus_sylvatica_EUFORGEN.shp", as.sf = TRUE)
+bur_clip <- rgeos::gIntersection(poland, buk)
+
+draw_maps_4(sites_so_gps, "BK", facet = TRUE)
+density_plot_bk <- draw_density_plot(sites_so_gps, "BK") 
+density_plot_bk + tm_shape(buk) + tm_fill(col = "blue", alpha = 0.6) 
+
+
+# many species at once --- --- ---
+# gatunki <- as.list(sort(as.character(unique(sites_so_gps$gat))))
+# gatunki_sample <- (gatunki[1:3])
+# gatunki <- c("DB", "BK", "JD", "ŚW", "GB")
+# names(gatunki) <- gatunki
+# lapply(gatunki, draw_maps_4, dataframe = sites_so_gps, facet = TRUE)
 
 # save_tmap(draw_maps_4("BK"), "World_map.png", width=1280, height=1024)
 
-# GRID drawing ------------------------------------------------------------------------------------------------------------
+# GRID drawing --------------------------------------------------------------------------------------------------------
 # Poland as 10km squares
 # poland <- read_shape("POL_adm_shp/POL_adm0.shp", as.sf = TRUE)
 # poland_grid <- read_shape("Poland_shapefile/pl_10km.shp", as.sf = TRUE)
