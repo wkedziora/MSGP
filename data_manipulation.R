@@ -9,6 +9,7 @@ library(ggtern)
 library(tmap) # vignette("tmap-nutshell")
 library(tmaptools)
 library(sf)
+library(lwgeom)
 library(ks)
 library(feather)
 library(tidyverse) # should be loaded as last to make sure that its function work without any additional commands
@@ -170,12 +171,16 @@ table(cut(sites_so$wiek_pan_pr, breaks = c(0, 20, 40, 60, 80, 100, 120, 140, 160
 gatunki <- c("BK", "JD", "ŚW", "GB")
 names(gatunki) <- gatunki
 
-buk <- read_shape("ranges/Fagus_sylvatica_EUFORGEN.shp", as.sf = TRUE)
-bur_clip <- st_intersection(poland, buk)
+buk <- read_shape("ranges/Fagus_sylvatica_EUFORGEN.shp", as.sf = TRUE) %>% st_make_valid() 
+buk_clip <- st_intersection(poland, buk)
+buk_zasieg <- read_shape("dane/zasiegi_gatunkow_simplified.shp", as.sf = TRUE, current.projection = "2180") %>% filter(GAT == "Bk")
 
 draw_maps_4(sites_so_gps, "BK", facet = TRUE)
 density_plot_bk <- draw_density_plot(sites_so_gps, "BK") 
-density_plot_bk + tm_shape(buk) + tm_fill(col = "blue", alpha = 0.6) 
+density_plot_bk + tm_shape(buk_clip) + tm_fill(col = "blue", alpha = 0.6)
+
+tm_shape(buk_clip) + tm_fill(col = "blue", alpha = 0.6) +
+  tm_shape(buk_zasieg) + tm_lines()
 
 
 # many species at once --- --- ---
