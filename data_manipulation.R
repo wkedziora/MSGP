@@ -136,10 +136,10 @@ gps_coord <- read_feather("gps_coord.feather") # GPS coordinates
 sites <- read_feather("sites.feather") # site description
 
 # adding gps data ----------------------------------------------------------------------------------------------------
-trees_05_gps <- add_gps(trees_05)
-trees_05_3_gps <- add_gps(trees_05_3)
-trees_3_7_gps <- add_gps(trees_3_7)
-trees_7_gps <- add_gps(trees_7)
+# trees_05_gps <- add_gps(trees_05)
+# trees_05_3_gps <- add_gps(trees_05_3)
+# trees_3_7_gps <- add_gps(trees_3_7)
+# trees_7_gps <- add_gps(trees_7)
 
 # ### MAPKI  -------------------------------------------------------------------------------------------------------
 # # generating raster density map ----------------------------------------------------------------------------------------------
@@ -154,7 +154,7 @@ bind_rows("< 0.5m" = trees_05,
           "dbh > 7cm" = trees_7, 
           .id = "group") %>% 
   group_by(gat) %>% 
-  filter(n() > 99) %>% 
+  filter(n() > 99) %>% #removes species that are seldom
   ungroup() -> trees_all
 
 # I need to add age restriction to avoid young pine monocultures
@@ -171,7 +171,7 @@ gatunki <- c("BK", "JD", "ŚW", "GB")
 names(gatunki) <- gatunki
 
 buk <- read_shape("ranges/Fagus_sylvatica_EUFORGEN.shp", as.sf = TRUE)
-bur_clip <- rgeos::gIntersection(poland, buk)
+bur_clip <- st_intersection(poland, buk)
 
 draw_maps_4(sites_so_gps, "BK", facet = TRUE)
 density_plot_bk <- draw_density_plot(sites_so_gps, "BK") 
